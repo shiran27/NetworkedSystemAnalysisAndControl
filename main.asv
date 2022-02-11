@@ -1,0 +1,75 @@
+clear all
+close all 
+clc
+
+rand('seed',7);
+
+% Create a network object
+network = Network(0)
+
+% Number of subsystems
+numOfSubsystems = 7;
+dimentionOfSpace = 2;
+sizeOfSpace = 1;
+communicationRadius = 0.7;
+
+% Create the network and plot it
+network = network.loadARandomNetwork(numOfSubsystems,dimentionOfSpace,sizeOfSpace,communicationRadius);
+network.drawNetwork(1);
+
+[A,B,C,D,E,F,x] = network.getNetworkMatrices()
+
+
+
+timeResolution = 0.001;
+periodT = 50; % 50, 200, 500, 
+textHandle1 = text();  textHandle2 = text(); textHandle3 = text(); 
+plotMode = true; 
+videoMode = false;
+data = zeros(periodT/timeResolution+1, numOfSubsystems, 5);
+timeSteps = 1;
+frameCount = 1;
+for t = 0:timeResolution:periodT
+    
+    % target update
+    for i = 1:1:numOfTargets
+        [costVal, dataVal, costVal2] = network.subsystems(i).update(timeResolution,plotMode,t); 
+        cost = cost + costVal;
+        if targetControllersEnabled
+            controlCost = controlCost + costVal2;
+        end
+        
+        if plotMode
+            data(timeSteps,i,:) = dataVal; %[phi ,phiHat ,Omega ,r ,eta]
+        end
+    end
+    
+    
+    
+    % display & video
+    if rem(t,0.1)==0 
+        time = t
+        if plotMode 
+            network.updateNetwork(1,t);
+            if t~=0
+                delete(textHandle1);
+                textHandle1 = text(0.05,0.96,['Cost: ',num2str(cost/t,5)],'Color','k','FontSize',10);
+            end
+            delete(textHandle2);
+            textHandle2 = text(0.05,0.92,['Time: ',num2str(t,5)],'Color','k','FontSize',10);
+            if 1 %targetControllersEnabled
+                delete(textHandle3);
+                textHandle3 = text(0.05,0.88,['Ctrl. Cost: ',num2str(periodT*controlCost/t,5)],'Color','k','FontSize',10);
+            end
+        end
+        
+        if videoMode
+            frameArray(frameCount) = getframe(gcf);
+            frameCount = frameCount + 1;
+        end
+        
+        
+    end
+    
+    timeSteps = timeSteps + 1;
+end
