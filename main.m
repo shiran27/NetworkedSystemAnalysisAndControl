@@ -5,28 +5,30 @@ clc
 rand('seed',7);
 
 % Create a network object
-network = Network(0)
+network = Network(0);
 
 % Number of subsystems
 numOfSubsystems = 7;
 dimentionOfSpace = 2;
 sizeOfSpace = 1;
-communicationRadius = 0.07;
+communicationRadius = 0.7;
 
 % Create the network and plot it
 network = network.loadARandomNetwork(numOfSubsystems,dimentionOfSpace,sizeOfSpace,communicationRadius);
 network.drawNetwork(1);
 
-[A,B,C,D,E,F,x] = network.getNetworkMatrices()
+[bestIndexing, minCost, worstIndexing, maxCost] = network.findOptimumIndexing()
+network.drawIndexing(bestIndexing)
+% network.drawIndexing(worstIndexing)
 
 
-
+% [A,B,C,D,E,F,x] = network.getNetworkMatrices()
 
 
 
 
 timeResolution = 0.001;
-periodT = 5; % 50, 200, 500, 
+periodT = 1; % 50, 200, 500, 
 textHandle1 = text();  textHandle2 = text(); textHandle3 = text(); 
 plotMode = true; 
 videoMode = false;

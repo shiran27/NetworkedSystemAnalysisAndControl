@@ -7,6 +7,11 @@ classdef Subsystem < handle
         revisedIndex
         location
         neighbors
+        exclusiveNeighbors
+        outNeighbors 
+        exclusiveOutNeighbors
+        leastNeighbor  %\Gamma_i
+        leastOutNeighbor %\Delta_i
         
         graphicHandles
         
@@ -142,7 +147,7 @@ classdef Subsystem < handle
             A = obj.A{obj.index};
             B = obj.B{obj.index};
             Q = 100*eye(obj.dim_n);
-            R = 20*eye(obj.dim_p)
+            R = 20*eye(obj.dim_p);
             
             [K,~,~] = lqr(A,B,Q,R);
             obj.localSFBLQRControllerGains = K;
@@ -165,8 +170,13 @@ classdef Subsystem < handle
         function outputArg = drawSubsystem(obj)
             hold on
             viscircles(obj.location,0.015,'Color','b');
-            text(obj.location(1),obj.location(2)-0.04,num2str(obj.index),'Color','blue','FontSize',10);
+            text(obj.location(1)-0.02,obj.location(2)-0.04,num2str(obj.index),'Color','k','FontSize',10);
         end
+        
+        function outputArg = drawIndex(obj,indexVal)
+            hold on
+            text(obj.location(1)-0.04,obj.location(2),num2str(indexVal),'Color','r','FontSize',10);
+        end 
         
         
         function [xCost, uCost, data] = update(obj,deltaT,subsystems)

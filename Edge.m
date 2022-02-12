@@ -37,7 +37,7 @@ classdef Edge < handle
         function distanceOutput = getLength(obj)
             distanceOutput = norm(obj.locations(1,:)-obj.locations(2,:),2);
             if ~obj.enabled
-                distanceOutput = 100*distanceOutput;
+                distanceOutput = max(10*distanceOutput,2);
             end
                 
         end

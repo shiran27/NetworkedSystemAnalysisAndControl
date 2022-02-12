@@ -7,6 +7,9 @@ classdef Subsystem < handle
         revisedIndex
         location
         neighbors
+        leastNeighbor  %\Gamma_i
+        outNeighbors        
+        leastOutNeighbor %\Delta_i
         
         graphicHandles
         
@@ -138,11 +141,14 @@ classdef Subsystem < handle
             obj.w = zeros(obj.dim_q,1); % initial disturbance
         end
         
-        function output = designlocalSFBLQRControllerGains(obj)
-            A = obj.A{obj.index}
-            B = obj.B{obj.index}
-            Q = 10*eye(obj.dim_n)
-            R = 5eye
+        function output = designLocalSFBLQRControllerGains(obj)
+            A = obj.A{obj.index};
+            B = obj.B{obj.index};
+            Q = 100*eye(obj.dim_n);
+            R = 20*eye(obj.dim_p)
+            
+            [K,~,~] = lqr(A,B,Q,R);
+            obj.localSFBLQRControllerGains = K;
         end
         
         function [n,p,q,m] = getDimensions(obj) %size of state, input, disturbance and output
@@ -162,8 +168,14 @@ classdef Subsystem < handle
         function outputArg = drawSubsystem(obj)
             hold on
             viscircles(obj.location,0.015,'Color','b');
-            text(obj.location(1),obj.location(2)-0.04,num2str(obj.index),'Color','blue','FontSize',10);
+            text(obj.location(1),obj.location(2)-0.04,num2str(obj.index),'Color','k','FontSize',10);
         end
+        
+        function outputArg = drawIndexing(obj,indexVal)
+            hold on
+            text(obj.location(1),obj.location(2)-0.04,num2str(obj.index),'Color','k','FontSize',10);
+        end 
+        
         
         function [xCost, uCost, data] = update(obj,deltaT,subsystems)
             
@@ -192,8 +204,8 @@ classdef Subsystem < handle
             yNew = sumCx+sumDu+sumFw;
            
             % control u and disturbance w for the next iteration
-            uNew = zeros(obj.dim_p,1);
-            wNew = 0.1*randn(obj.dim_q,1);
+            uNew = -obj.localSFBLQRControllerGains*xNew; % zeros(obj.dim_p,1);
+            wNew = 0.05*randn(obj.dim_q,1);
             
             % compiling new data
             xCost = deltaT*xNew'*xNew;

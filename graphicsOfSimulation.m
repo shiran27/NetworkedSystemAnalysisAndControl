@@ -6,8 +6,8 @@ timeSeries = 0:timeResolution:periodT;
 figure()
 for i = 1:1:numOfSubsystems
             
-    ax = subplot(2,ceil(numOfSubsystems/2),i)
-    ax.YColorMode = 'manual'
+    ax = subplot(2,ceil(numOfSubsystems/2),i);
+    ax.YColorMode = 'manual';
     
     yyaxis left
     plot(timeSeries, data(:,i,1),'-r','DisplayName','$\Vert x_i(t) \Vert$')
