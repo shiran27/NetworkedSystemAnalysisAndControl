@@ -15,8 +15,8 @@ sizeOfSpace = 1;
 communicationRadius = 0.7;
 
 % Create the network and plot it
-% network = network.loadARandomNetwork(numOfSubsystems,dimentionOfSpace,sizeOfSpace,communicationRadius);
-network = network.loadTheCustomNetwork();
+network = network.loadARandomNetwork(numOfSubsystems,dimentionOfSpace,sizeOfSpace,communicationRadius);
+% network = network.loadTheCustomNetwork();
 
 network.drawNetwork(1);
 
@@ -43,6 +43,7 @@ isStable1 = isstable(networkedSystem)
 
 
 % Check the stability of the networked system in a distributed manner
+isStable = network.centralizedStabilityTest()
 isStable3 = network.checkStability(bestIndexing,1)
 isStable4 = network.checkStability([],1)
 isStable5 = network.checkStability(bestIndexing,2)
@@ -56,7 +57,7 @@ isStable6 = network.checkStability([],2)
 
 % Check QSR dissipativity from w to y
 % construct Q,S,R here
-[Q,S,R] = network.getSomeQSRMatrices('strictly passive'); % random, Passive
+[Q,S,R] = network.getSomeQSRMatrices('strictly passive'); % strictly passive, random, passive
 network.storeQSRMatrices(Q,S,R); % store information locally at each sub-system
 isQSRDissipative1 = network.centralizedQSRDissipativityTest()
 isQSRDissipative2 = network.checkQSRDissipativity(bestIndexing)
@@ -67,8 +68,14 @@ isQSRDissipative2 = network.checkQSRDissipativity(bestIndexing)
 % isPositiveDefinite2 = network.checkPositiveDefiniteness(testNetworkMatrix,bestIndexing);
 
 
-% Find feedback controls
-K = network.designLocalStabilizingSFBControllers(bestIndexing)
+% Find feedback controls: in a centralized manner
+% K = network.designGlobalStabilizingSFBControllers()
+% network.assignLocalControllers(-K);
+K = network.designGlobalDissipatingSFBControllers()
+network.assignLocalControllers(K);
+
+% Find feedback controls: in a decentralized manner
+% K = network.designLocalStabilizingSFBControllers(bestIndexing)
 % K = network.designLocalDissipatingSFBControllers(bestIndexing)
 
 

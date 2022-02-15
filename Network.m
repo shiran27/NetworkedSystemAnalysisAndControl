@@ -526,31 +526,6 @@ classdef Network < handle
         end
         
         
-        % Check stability of the networked system
-        function output = checkStability(obj,indexing,typeVal)
-            
-            if isempty(indexing)
-                indexing = [1:1:length(obj.subsystems)];
-            end
-            
-            for i = 1:1:length(indexing)
-                iInd = indexing(i);
-                previousSubsystems = indexing(1:i-1);
-                if typeVal==1
-                    isStable = obj.subsystems(iInd).checkStability(previousSubsystems,obj.subsystems);
-                else
-                    isStable = obj.subsystems(iInd).checkStability2(previousSubsystems,obj.subsystems);
-                end
-                if ~isStable
-                    output = false;
-                    break
-                else
-                    output = true;
-                end
-            end
-            
-        end
-        
         
         % Assign given controller coefficients at subsystems
         function output = assignLocalControllers(obj,K)
@@ -577,16 +552,16 @@ classdef Network < handle
         
         
         function [Q,S,R] = getSomeQSRMatrices(obj,stringInput)
-            dim_m = 0 % for Q
-            dim_q = 0 % for R
+            dim_m = 0; % for Q
+            dim_q = 0; % for R
             for i=1:1:length(obj.subsystems)
                 dim_m = dim_m + obj.subsystems(i).dim_m;
                 dim_q = dim_q + obj.subsystems(i).dim_q;
             end
             
             if isequal(stringInput,"strictly passive")
-                nu = 10;
-                rho = 10;               
+                nu = 1000000;
+                rho = 1000000;               
                 
                 Q = -rho*eye(dim_m);
                 S = 0.5*eye(dim_m,dim_q);
@@ -623,28 +598,22 @@ classdef Network < handle
         end 
         
         
-        % Check QSR-dissipativity of the networked system
-        function output = checkQSRDissipativity(obj,indexing)
-            
-            if isempty(indexing)
-                indexing = [1:1:length(obj.subsystems)];
-            end
-            
-            for i = 1:1:length(indexing)
-                iInd = indexing(i);
-                previousSubsystems = indexing(1:i-1);                
-                isQSRDissipative = obj.subsystems(iInd).checkQSRDissipativity(previousSubsystems, obj.subsystems);
-                if ~isQSRDissipative
-                    output = false;
-                    break
-                else
-                    output = true;
-                end
-            end
-            
+        
+        %% Centralized stability and dissipativity tests
+        
+        % Centralized stability test
+        function output = centralizedStabilityTest(obj)
+            A = obj.networkMatrices.A;
+            setlmis([]);  % To initialize the LMI description
+            P = lmivar(1,[size(A,1), 1]); % P is the variable, 1: square symmetric, size(A,1) gives the size and 1 gives that P is a full matrix 
+            lmiterm([-1, 1, 1, P],-1,A,'s');
+            lmiterm([-2, 1, 1, P],1,1); % defines -P<0
+            lmisys = getlmis;
+            [tmin,~] = feasp(lmisys); % Solve the LMI system
+            output = tmin <= 0; % feasible if this is satisfied
         end
         
-        
+            
         % Centralized dissipativity test
         function output = centralizedQSRDissipativityTest(obj)
             A = obj.networkMatrices.A;
@@ -682,6 +651,140 @@ classdef Network < handle
         end
         
         
+        
+        %% Decentralized stability and dissipativity tests
+        
+        
+        % Check stability of the networked system
+        function output = checkStability(obj,indexing,typeVal)
+            
+            if isempty(indexing)
+                indexing = [1:1:length(obj.subsystems)];
+            end
+            
+            for i = 1:1:length(indexing)
+                iInd = indexing(i);
+                previousSubsystems = indexing(1:i-1);
+                if typeVal==1
+                    isStable = obj.subsystems(iInd).checkStability(previousSubsystems,obj.subsystems);
+                else
+                    isStable = obj.subsystems(iInd).checkStability2(previousSubsystems,obj.subsystems);
+                end
+                if ~isStable
+                    output = false;
+                    break
+                else
+                    output = true;
+                end
+            end
+            
+        end
+        
+        
+        % Check QSR-dissipativity of the networked system
+        function output = checkQSRDissipativity(obj,indexing)
+            
+            if isempty(indexing)
+                indexing = [1:1:length(obj.subsystems)];
+            end
+            
+            for i = 1:1:length(indexing)
+                iInd = indexing(i);
+                previousSubsystems = indexing(1:i-1);                
+                isQSRDissipative = obj.subsystems(iInd).checkQSRDissipativity(previousSubsystems, obj.subsystems);
+                if ~isQSRDissipative
+                    output = false;
+                    break
+                else
+                    output = true;
+                end
+            end
+            
+        end
+        
+        
+        
+        
+        
+        %% Centralized control design
+        
+        % Stabilizing state-feedback controller design
+        function [K, isStabilizable] = designGlobalStabilizingSFBControllers(obj)
+            A = obj.networkMatrices.A;
+            B = obj.networkMatrices.B;
+            
+            setlmis([]);  % To initialize the LMI description
+            Q = lmivar(1,[size(A,1), 1]); % P is the variable, 1: square symmetric, size(A,1) gives the size and 1 gives that P is a full matrix 
+            L = lmivar(2,[size(B,2),size(A,1)]);
+            
+            % We need Q>0 and -AQ-BL-QA'-L'B'>0 where P = Q^{-1} and K = LQ^{-1}
+            lmiterm([-1, 1, 1, Q],-1,A','s'); % defines -AQ-QA'>0
+            lmiterm([-1, 1, 1, L],-B,1,'s');   % defines -BL-L'B'>0
+            lmiterm([-2, 1, 1, Q],1,1);       % defines -Q<0
+            lmisys = getlmis;
+            [tmin,sol] = feasp(lmisys); % Solve the LMI system
+            isStabilizable = tmin <= 0; % feasible if this is satisfied
+            Q = dec2mat(lmisys,sol,Q); 
+            L = dec2mat(lmisys,sol,L); 
+            K = L/Q;
+        end
+        
+        % Stabilizing state-feedback controller design
+        function [K, isDissipative] = designGlobalDissipatingSFBControllers(obj)
+            A = obj.networkMatrices.A;
+            B = obj.networkMatrices.B;
+            E = obj.networkMatrices.E; % instead of B
+            C = obj.networkMatrices.C; 
+            F = obj.networkMatrices.F; % instead of D
+            Q = obj.networkMatrices.Q;
+            S = obj.networkMatrices.S;
+            R = obj.networkMatrices.R;
+            
+            setlmis([]);  % To initialize the LMI description
+            L = lmivar(1,[size(A,1), 1]); % L = P^{-1} > 0 is a variable, 1: square symmetric, size(A,1) gives the size and 1 gives that P is a full matrix 
+            M = lmivar(2,[size(B,2), size(A,1)]); % M = KP^{-1} is a free variable
+            
+            % W = [W_11, W_12, W_13; W_21, W_22, W_23; W_31, W_32, W_34]
+            
+            % W_11 =  -LA^T -AL - M^T B^T - BM
+            lmiterm([-1, 1, 1, L],-1,A','s');
+            lmiterm([-1, 1, 1, M],-B,1,'s');
+            % W_12 = -E + L C^T S
+            lmiterm([-1, 1, 2, L],1,C'*S);
+            lmiterm([-1, 1, 2, 0],-E);
+            % W_13 = LC^T
+            lmiterm([-1, 1, 3, L],1,C');
+            
+            % W_21 = -E^T + S^T C L
+            lmiterm([-1, 2, 1, L],S'*C,1);
+            lmiterm([-1, 2, 1, 0],-E');
+            % W_22 = F^T S + S^T F + R
+            lmiterm([-1, 2, 2, 0],F'*S+S'*F+R);
+            % W_23 = F^T
+            lmiterm([-1, 2, 3, 0],F');
+            
+            % W_31 = CL
+            lmiterm([-1, 3, 1, L],C,1);
+            % W_32 = F
+            lmiterm([-1, 3, 2, 0],F);
+            % W_33 = Q^{-1}
+            lmiterm([-1, 3, 3, 0],inv(Q));
+            
+            % L>0
+            lmiterm([-2, 1, 1, L],1,1); % defines -P<0
+            lmisys = getlmis;
+            [tmin,sol] = feasp(lmisys); % Solve the LMI system
+            isDissipative = tmin <= 0; % strictly feasible if this is satisfied
+            L = dec2mat(lmisys,sol,L); 
+            M = dec2mat(lmisys,sol,M); 
+            K = M/L;
+        end
+        
+        
+        
+        %% Decentralized control design
+        
+        % Stabilizing state-feedback controller design
         function [K, isStabilizable] = designLocalStabilizingSFBControllers(obj,indexing)
         
             if isempty(indexing)
@@ -693,10 +796,6 @@ classdef Network < handle
                 previousSubsystems = indexing(1:i-1);                
                 [isStabilizable,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).designLocalStabilizingSFBControllers(previousSubsystems, obj.subsystems);
                 
-                if ~isStabilizable
-                    break
-                end
-                
                 K{iInd,iInd} = K_ii;
                 for j = 1:1:length(previousSubsystems)
                     jInd = previousSubsystems(j);
@@ -705,13 +804,19 @@ classdef Network < handle
                     K{iInd,jInd} = K_ijVals{jInd};
                     K{jInd,iInd} = K_jiVals{jInd};
                 end
+                
+                if ~isStabilizable
+                    break
+                end
+                
             end
             
             % Collect all the coefficients
-                    
         end
         
-        function [K, isDissipative] = network.designLocalDissipatingSFBControllers(obj,indexing)
+        
+        % Stabilizing state-feedback controller design
+        function [K, isDissipative] = designLocalDissipatingSFBControllers(obj,indexing)
         
             if isempty(indexing)
                 indexing = [1:1:length(obj.subsystems)];
@@ -721,14 +826,25 @@ classdef Network < handle
             for i = 1:1:length(indexing)
                 iInd = indexing(i);
                 previousSubsystems = indexing(1:i-1);                
-                [K_ii,K_ij,K_ji,isDissipative] = obj.subsystems(iInd).designLocalDissipatingSFBControllers(previousSubsystems, obj.subsystems);
-                K = [K, K_ji; K_ij, K_ii];
-                if ~isStabilizable
+                [isDissipative,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).designLocalDissipatingSFBControllers(previousSubsystems, obj.subsystems);
+                
+                K{iInd,iInd} = K_ii;
+                for j = 1:1:length(previousSubsystems)
+                    jInd = previousSubsystems(j);
+                    obj.subsystems(jInd).localStabilizingSFBControllerGains{iInd} = K_jiVals{jInd};
+                    
+                    K{iInd,jInd} = K_ijVals{jInd};
+                    K{jInd,iInd} = K_jiVals{jInd};
+                end
+                
+                if ~isDissipative
                     break
                 end
             end
                     
         end
+        
+        
        
     end
 end
