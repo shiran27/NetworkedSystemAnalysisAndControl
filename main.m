@@ -14,13 +14,21 @@ dimentionOfSpace = 2;
 sizeOfSpace = 1;
 communicationRadius = 0.7;
 
+% subsystem dims
+for i = 1:1:numOfSubsystems
+    dims{i}.n = 4; % x
+    dims{i}.p = 2; % u
+    dims{i}.q = 2; % w  
+    dims{i}.m = 2; % y
+end
+
 % Create the network and plot it
-network = network.loadARandomNetwork(numOfSubsystems,dimentionOfSpace,sizeOfSpace,communicationRadius);
+network = network.loadARandomNetwork(numOfSubsystems,dimentionOfSpace,sizeOfSpace,communicationRadius,dims);
 % network = network.loadTheCustomNetwork();
 
-network.drawNetwork(1);
+network.drawNetwork(1,true);
 
-[bestIndexing, minCost, worstIndexing, maxCost] = network.findOptimumIndexing()
+[bestIndexing, minCost, worstIndexing, maxCost, basicIndexingCost] = network.findOptimumIndexing()
 network.drawIndexing(bestIndexing)
 % network.drawIndexing(worstIndexing)
 
@@ -32,14 +40,14 @@ isStable1 = isstable(networkedSystem)
 
 
 % Global controller design to stabilize
-% Q = 10000*eye(size(A,1));
-% R = 10000*eye(size(B,2));
-% [K,~,~] = lqr(A,B,Q,R);
-% network.assignLocalControllers(K);
-% newA = A-B*K; 
-% newA(A==0)=0;
-% networkedSystem2 = ss(newA,B,C,D);
-% isStable2 = isstable(networkedSystem2)
+Q = 10000*eye(size(A,1));
+R = 10000*eye(size(B,2));
+[K,~,~] = lqr(A,B,Q,R);
+network.assignControllerGains(K,'globalSFBLQR');
+newA = A - B*K; 
+newA(A==0)=0;
+networkedSystem2 = ss(newA,B,C,D);
+isStable2 = isstable(networkedSystem2);
 
 
 % Check the stability of the networked system in a distributed manner
@@ -69,14 +77,16 @@ isQSRDissipative2 = network.checkQSRDissipativity(bestIndexing)
 
 
 % Find feedback controls: in a centralized manner
-% K = network.designGlobalStabilizingSFBControllers()
-% network.assignLocalControllers(-K);
-K = network.designGlobalDissipatingSFBControllers()
-network.assignLocalControllers(K);
+% [K, isStable] = network.designGlobalStabilizingSFBControllers()
+% network.assignControllerGains(-K,'globalSFBStabLMI');
+% [K, isDissipative] = network.designGlobalDissipatingSFBControllers()
+% network.assignControllerGains(K,'globalSFBDissLMI');
 
 % Find feedback controls: in a decentralized manner
-% K = network.designLocalStabilizingSFBControllers(bestIndexing)
-% K = network.designLocalDissipatingSFBControllers(bestIndexing)
+% [K, isStable] = network.designLocalStabilizingSFBControllers(bestIndexing)
+% network.assignControllerGains(-K,'localSFBStabLMI');
+% [K, isDissipative] = network.designLocalDissipatingSFBControllers(bestIndexing)
+% network.assignControllerGains(-K,'localSFBDissLMI');
 
 
 

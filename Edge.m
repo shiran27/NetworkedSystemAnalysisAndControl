@@ -30,7 +30,8 @@ classdef Edge < handle
 %                     'CreateFcn', @(l, e) set(l, 'Color', [0 0 0 .1]));
             else
 %                 plot(obj.locations(:,1),obj.locations(:,2),'k','LineWidth',2);
-                quiver(p1(1),p1(2),dp(1),dp(2),0,'filled','Color','k','LineWidth',1.25)
+                q = quiver(p1(1),p1(2),dp(1),dp(2),0,'filled','Color','k','LineWidth',1.25,'MaxHeadSize',0.15/norm(dp));
+                
             end
         end
         

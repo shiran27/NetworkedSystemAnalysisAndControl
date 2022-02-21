@@ -33,7 +33,7 @@ classdef Network < handle
         
         
         % function to load a random networked system
-        function obj = loadARandomNetwork(obj,numOfSubsystems,dimentionOfSpace,sizeOfSpace,communicationRadius)
+        function obj = loadARandomNetwork(obj,numOfSubsystems,dimentionOfSpace,sizeOfSpace,communicationRadius,dims)
             
             % Generate subsystems' list
             subsystemLocations = sizeOfSpace*rand(numOfSubsystems,dimentionOfSpace);
@@ -42,7 +42,7 @@ classdef Network < handle
             % Subsystem-spaecific parameters will be loaded inside
             obj.subsystems = [];
             for i = 1:1:numOfSubsystems
-                newSubsystem = Subsystem(i, subsystemLocations(i,:));
+                newSubsystem = Subsystem(i, subsystemLocations(i,:),dims{i});
                 obj.subsystems = [obj.subsystems, newSubsystem];
             end
             
@@ -73,7 +73,8 @@ classdef Network < handle
             % Loading subsystem parameters
             for i = 1:1:numOfSubsystems
 %                 obj.subsystems(i).loadParameters(obj.subsystems);
-                obj.subsystems(i).loadStableParameters(obj.subsystems);
+%                 obj.subsystems(i).loadStableParameters(obj.subsystems);
+                obj.subsystems(i).loadPassiveParameters(obj.subsystems); % this was used in P1
                 obj.subsystems(i).designLocalSFBLQRControllerGains(); % find local state feedback LQR controller gains
                 
             end
@@ -85,19 +86,25 @@ classdef Network < handle
         function obj = loadTheCustomNetwork(obj)
             
             % Subsystem locations (for plotting purposes only) Nx2 matrix
-            subsystemLocations = [0.5,0.5; 0.2, 0.2; 0.8, 0.2; 0.8,0.8; 0.2,0.8];
+%             subsystemLocations = [0.5,0.5; 0.2, 0.2; 0.8, 0.2; 0.8,0.8; 0.2,0.8];
+            subsystemLocations = [0.25,0.5; 0.5, 0.5; 0.75, 0.5; 0.375,0.25];
             numOfSubsystems = size(subsystemLocations,1);
             
             % Initializing subsystems: 
             % Subsystem-spaecific parameters will be loaded inside
             obj.subsystems = [];
             for i = 1:1:numOfSubsystems
-                newSubsystem = Subsystem(i, subsystemLocations(i,:));
+                dims.n = 4; % x
+                dims.p = 2; % u
+                dims.q = 2; % w  
+                dims.m = 2; % y
+                newSubsystem = Subsystem(i, subsystemLocations(i,:),dims);
                 obj.subsystems = [obj.subsystems, newSubsystem];
             end
             
             % Inter-subsystem connections: defined by a list of edges Nx2
-            edgeList = [1,2;2,1;1,3;3,1;1,4;4,1;1,5;5,1;2,3;3,4;4,5;5,2];
+%             edgeList = [1,2;2,1;1,3;3,1;1,4;4,1;1,5;5,1;2,3;3,4;4,5;5,2];
+            edgeList = [1,2;2,1;2,3;3,2;1,4;4,1;4,2;2,4];
         
             % Generate edges' list
             obj.edges = [];
@@ -271,13 +278,22 @@ classdef Network < handle
         
         
         % Draw the network in matlab figure
-        function outputArg = drawNetwork(obj, figNum)
+        function outputArg = drawNetwork(obj, figNum, args)
+            
+            sizeOfSpace = 1;
+            legendOn = args(1);
+            if length(args)>1
+                axisLimits = args(2:5)
+            else
+                axisLimits = [0,sizeOfSpace,0,sizeOfSpace];
+            end
+            
             figure(figNum)
             
             grid on
             axis equal
-            sizeOfSpace = 1;
-            axis([0,sizeOfSpace,0,sizeOfSpace]);
+            axis(axisLimits);
+            axis off
             
             % draw edges
             for i = 1:1:length(obj.edges)
@@ -294,29 +310,43 @@ classdef Network < handle
             axis equal
             axis([0,sizeOfSpace,0,sizeOfSpace]);
             
-            % Printing Legend
-            posX = 0.9;
-            posY = 0.9;
-            thickness = 0.05;
-            height = 0.01;
+            if legendOn
+                % Printing Legend
+                posX = 0.9;
+                posY = 0.9;
+                thickness = 0.05;
+                height = 0.01;
 
-            rx = rectangle('Position',[posX, posY+6*height, thickness, height],...
-                'FaceColor',[0.8 0 0 0.5],'EdgeColor','k','LineWidth',0.01);
-            tx = text(posX-3*height,posY+6*height+height/2,'x_i','Color','k','FontSize',10);
+                rx = rectangle('Position',[posX, posY+6*height, thickness, height],...
+                    'FaceColor',[0.8 0 0 0.5],'EdgeColor','k','LineWidth',0.01);
+                tx = text(posX-3*height,posY+6*height+height/2,'x_i','Color','k','FontSize',10);
 
-            ry = rectangle('Position',[posX, posY+4*height, thickness, height],...
-                'FaceColor',[0 0.8 0 0.5],'EdgeColor','k','LineWidth',0.01);
-            ty = text(posX-3*height,posY+4*height+height/2,'y_i','Color','k','FontSize',10);
+                ry = rectangle('Position',[posX, posY+4*height, thickness, height],...
+                    'FaceColor',[0 0.8 0 0.5],'EdgeColor','k','LineWidth',0.01);
+                ty = text(posX-3*height,posY+4*height+height/2,'y_i','Color','k','FontSize',10);
 
-            ru = rectangle('Position',[posX, posY+2*height, thickness, height],...
-                'FaceColor',[0 0 0.8 0.5],'EdgeColor','k','LineWidth',0.01);
-            ty = text(posX-3*height,posY+2*height+height/2,'u_i','Color','k','FontSize',10);
+                ru = rectangle('Position',[posX, posY+2*height, thickness, height],...
+                    'FaceColor',[0 0 0.8 0.5],'EdgeColor','k','LineWidth',0.01);
+                ty = text(posX-3*height,posY+2*height+height/2,'u_i','Color','k','FontSize',10);
 
-            rw = rectangle('Position',[posX, posY, thickness, height],...
-                'FaceColor',[0.1 0.1 0.1 0.5],'EdgeColor','k','LineWidth',0.01);
-            ty = text(posX-3*height,posY+height/2,'w_i','Color','k','FontSize',10);
+                rw = rectangle('Position',[posX, posY, thickness, height],...
+                    'FaceColor',[0.1 0.1 0.1 0.5],'EdgeColor','k','LineWidth',0.01);
+                ty = text(posX-3*height,posY+height/2,'w_i','Color','k','FontSize',10);
+            end
         end
         
+        
+        function output = shiftLocations(obj,xShift,yShift)
+            for i = 1:1:length(obj.subsystems)
+                obj.subsystems(i).location(1) = obj.subsystems(i).location(1) + xShift;
+                obj.subsystems(i).location(2) = obj.subsystems(i).location(2) + yShift;
+            end
+            
+            for i = 1:1:length(obj.edges)
+                obj.edges(i).locations(:,1) = obj.edges(i).locations(:,1) + xShift;
+                obj.edges(i).locations(:,2) = obj.edges(i).locations(:,2) + yShift;
+            end
+        end
         
         % Generate the complete system.
         function [A,B,C,D,E,F,x] = getNetworkMatrices(obj)
@@ -451,7 +481,7 @@ classdef Network < handle
                     jInd = indexing(j);
                     
                     % cost of having to communicate from j to i
-                    alpha_ij = obj.distanceMatrix(jInd,iInd);
+                    alpha_ij = obj.distanceMatrix(jInd,iInd)>1.5;
                     
                     % cost of having to send preliminary infomation to compute W_ij from j
                     % THis preliminary infomation is like terms A_ji, B_ji, ... 
@@ -492,8 +522,9 @@ classdef Network < handle
         end
         
         
-        function [bestIndexing, minCost, worstIndexing, maxCost] = findOptimumIndexing(obj)
+        function [bestIndexing, minCost, worstIndexing, maxCost, basicIndexingCost] = findOptimumIndexing(obj)
             basicIndexing = 1:1:length(obj.subsystems);
+            basicIndexingCost = obj.getCommunicationCost(basicIndexing);
             permutations = perms(basicIndexing);
             minCost = inf;
             maxCost = 0;
@@ -528,12 +559,22 @@ classdef Network < handle
         
         
         % Assign given controller coefficients at subsystems
-        function output = assignLocalControllers(obj,K)
+        function output = assignLocalControllers(obj,K,typeVal)
             for i = 1:1:length(obj.subsystems)
                 p = obj.subsystems(i).dim_p;
                 for j = 1:1:length(obj.subsystems)
                     n = obj.subsystems(j).dim_n;
-                    obj.subsystems(i).globalSFBLQRControllerGains{j} = K((i-1)*p+1:i*p,(j-1)*n+1:j*n);
+                    if any(obj.subsystems(i).neighbors==j)
+                        Kblock = K((i-1)*p+1:i*p,(j-1)*n+1:j*n);
+                    else
+                        Kblock = zeros(p,n);
+                    end
+                    
+                    if isequal(typeVal,'globalSFBLQR')
+                        obj.subsystems(i).globalSFBLQRControllerGains{j} = Kblock;
+                    elseif isequal(typeVal,'globalSFBLMI')
+                        obj.subsystems(i).globalSFBLMIControllerGains{j} = Kblock;
+                    end
                 end
             end
         end
@@ -559,17 +600,17 @@ classdef Network < handle
                 dim_q = dim_q + obj.subsystems(i).dim_q;
             end
             
-            if isequal(stringInput,"strictly passive")
-                nu = 1000000;
-                rho = 1000000;               
+            if isequal(stringInput,'strictly passive')
+                nu = 0.01;
+                rho = 0.01;               
                 
                 Q = -rho*eye(dim_m);
                 S = 0.5*eye(dim_m,dim_q);
                 R = -nu*eye(dim_q);
-            elseif isequal(stringInput,"random")
-                Q = 5*(rand(dim_m)-0.5); Q = Q + Q'; 
+            elseif isequal(stringInput,'random')
+                Q = 5*(rand(dim_m)-0.5); Q = Q*Q.'; % Q = Q + Q'; 
                 S = 2*(rand(dim_m,dim_q)-0.5); 
-                R = 5*(rand(dim_q)-0.5); R = R + R';
+                R = 5*(rand(dim_q)-0.5); R = R*R.'; % R = R + R';
             else % passive
                 Q = 0*eye(dim_m);
                 S = 0.5*eye(dim_m,dim_q);
@@ -609,8 +650,10 @@ classdef Network < handle
             lmiterm([-1, 1, 1, P],-1,A,'s');
             lmiterm([-2, 1, 1, P],1,1); % defines -P<0
             lmisys = getlmis;
-            [tmin,~] = feasp(lmisys); % Solve the LMI system
+            [tmin,sol] = feasp(lmisys); % Solve the LMI system
             output = tmin <= 0; % feasible if this is satisfied
+%             P = dec2mat(lmisys,sol,P);
+%             eig(P)
         end
         
             
@@ -627,7 +670,7 @@ classdef Network < handle
             setlmis([]);  % To initialize the LMI description
             P = lmivar(1,[size(A,1), 1]); % P is the variable, 1: square symmetric, size(A,1) gives the size and 1 gives that P is a full matrix 
 
-            % W = [W_ii1, W_2; W_3, W_4]
+            % W = [W_1, W_2; W_3, W_4]
             % W_1 = -A^T P - P A + C^\T Q C 
             lmiterm([-1, 1, 1, P],-1,A,'s');
             W1 = C'*Q'*C;
@@ -641,13 +684,14 @@ classdef Network < handle
             lmiterm([-1, 2, 1, 0],W2');
             % W_4 = F^\T Q F + (F^\T S + S^\T F) + R
             W4 = F'*Q*F + (F'*S + S'*F) + R;
-            lmiterm([-1, 2, 2, 0],W4');
+            lmiterm([-1, 2, 2, 0],W4);
             
             % P>0
             lmiterm([-2, 1, 1, P],1,1); % defines -P<0
             lmisys = getlmis;
-            [tmin,~] = feasp(lmisys); % Solve the LMI system
+            [tmin,sol] = feasp(lmisys); % Solve the LMI system
             output = tmin <= 0; % strictly feasible if this is satisfied
+            P = dec2mat(lmisys,sol,P);
         end
         
         
@@ -670,6 +714,7 @@ classdef Network < handle
                 else
                     isStable = obj.subsystems(iInd).checkStability2(previousSubsystems,obj.subsystems);
                 end
+                
                 if ~isStable
                     output = false;
                     break
@@ -723,13 +768,15 @@ classdef Network < handle
             lmiterm([-2, 1, 1, Q],1,1);       % defines -Q<0
             lmisys = getlmis;
             [tmin,sol] = feasp(lmisys); % Solve the LMI system
-            isStabilizable = tmin <= 0; % feasible if this is satisfied
+            isStabilizable = tmin < 0; % feasible if this is satisfied
             Q = dec2mat(lmisys,sol,Q); 
             L = dec2mat(lmisys,sol,L); 
             K = L/Q;
         end
         
-        % Stabilizing state-feedback controller design
+        
+        
+        % DIssipating state-feedback controller design
         function [K, isDissipative] = designGlobalDissipatingSFBControllers(obj)
             A = obj.networkMatrices.A;
             B = obj.networkMatrices.B;
@@ -744,31 +791,47 @@ classdef Network < handle
             L = lmivar(1,[size(A,1), 1]); % L = P^{-1} > 0 is a variable, 1: square symmetric, size(A,1) gives the size and 1 gives that P is a full matrix 
             M = lmivar(2,[size(B,2), size(A,1)]); % M = KP^{-1} is a free variable
             
-            % W = [W_11, W_12, W_13; W_21, W_22, W_23; W_31, W_32, W_34]
-            
-            % W_11 =  -LA^T -AL - M^T B^T - BM
-            lmiterm([-1, 1, 1, L],-1,A','s');
-            lmiterm([-1, 1, 1, M],-B,1,'s');
-            % W_12 = -E + L C^T S
-            lmiterm([-1, 1, 2, L],1,C'*S);
-            lmiterm([-1, 1, 2, 0],-E);
-            % W_13 = LC^T
-            lmiterm([-1, 1, 3, L],1,C');
-            
-            % W_21 = -E^T + S^T C L
-            lmiterm([-1, 2, 1, L],S'*C,1);
-            lmiterm([-1, 2, 1, 0],-E');
-            % W_22 = F^T S + S^T F + R
-            lmiterm([-1, 2, 2, 0],F'*S+S'*F+R);
-            % W_23 = F^T
-            lmiterm([-1, 2, 3, 0],F');
-            
-            % W_31 = CL
-            lmiterm([-1, 3, 1, L],C,1);
-            % W_32 = F
-            lmiterm([-1, 3, 2, 0],F);
-            % W_33 = Q^{-1}
-            lmiterm([-1, 3, 3, 0],inv(Q));
+            if det(Q)~=0 % if Q not a zero matrix
+                % W = [W_11, W_12, W_13; W_21, W_22, W_23; W_31, W_32, W_34]
+
+                % W_11 =  -LA^T -AL - M^T B^T - BM
+                lmiterm([-1, 1, 1, L],-1,A','s');
+                lmiterm([-1, 1, 1, M],-B,1,'s');
+                % W_12 = -E + L C^T S
+                lmiterm([-1, 1, 2, L],1,C'*S);
+                lmiterm([-1, 1, 2, 0],-E);
+                % W_13 = LC^T
+                lmiterm([-1, 1, 3, L],1,C');
+
+                % W_21 = -E^T + S^T C L
+                lmiterm([-1, 2, 1, L],S'*C,1);
+                lmiterm([-1, 2, 1, 0],-E');
+                % W_22 = F^T S + S^T F + R
+                lmiterm([-1, 2, 2, 0],F'*S+S'*F+R);
+                % W_23 = F^T
+                lmiterm([-1, 2, 3, 0],F');
+
+                % W_31 = CL
+                lmiterm([-1, 3, 1, L],C,1);
+                % W_32 = F
+                lmiterm([-1, 3, 2, 0],F);
+                % W_33 = Q^{-1}
+                lmiterm([-1, 3, 3, 0],inv(Q));
+            else %when Q is zero matrix
+                % W = [W_11, W_12; W_21, W_22]
+
+                % W_11 =  -LA^T -AL - M^T B^T - BM
+                lmiterm([-1, 1, 1, L],-1,A','s');
+                lmiterm([-1, 1, 1, M],-B,1,'s');
+                % W_12 = -E + L C^T S
+                lmiterm([-1, 1, 2, L],1,C'*S);
+                lmiterm([-1, 1, 2, 0],-E);
+                % W_21 = -E^T + S^T C L
+                lmiterm([-1, 2, 1, L],S'*C,1);
+                lmiterm([-1, 2, 1, 0],-E');
+                % W_22 = F^T S + S^T F + R
+                lmiterm([-1, 2, 2, 0],F'*S+S'*F+R);
+            end
             
             % L>0
             lmiterm([-2, 1, 1, L],1,1); % defines -P<0
@@ -797,10 +860,11 @@ classdef Network < handle
                 [isStabilizable,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).designLocalStabilizingSFBControllers(previousSubsystems, obj.subsystems);
                 
                 K{iInd,iInd} = K_ii;
+                obj.subsystems(iInd).controllerGains.localSFBStabLMI{iInd} = K_ii;
                 for j = 1:1:length(previousSubsystems)
                     jInd = previousSubsystems(j);
-                    obj.subsystems(jInd).localStabilizingSFBControllerGains{iInd} = K_jiVals{jInd};
-                    
+                    obj.subsystems(jInd).controllerGains.localSFBStabLMI{iInd} = K_jiVals{jInd};
+                    obj.subsystems(iInd).controllerGains.localSFBStabLMI{jInd} = K_ijVals{jInd};
                     K{iInd,jInd} = K_ijVals{jInd};
                     K{jInd,iInd} = K_jiVals{jInd};
                 end
@@ -809,6 +873,18 @@ classdef Network < handle
                     break
                 end
                 
+            end
+            
+            if isStabilizable
+                Kmat = [];
+                for i = 1:1:length(obj.subsystems)
+                    Karray = [];
+                    for j = 1:1:length(obj.subsystems)
+                        Karray = [Karray, K{i,j}];
+                    end
+                    Kmat = [Kmat; Karray];
+                end
+                K = Kmat;
             end
             
             % Collect all the coefficients
@@ -829,9 +905,11 @@ classdef Network < handle
                 [isDissipative,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).designLocalDissipatingSFBControllers(previousSubsystems, obj.subsystems);
                 
                 K{iInd,iInd} = K_ii;
+                obj.subsystems(iInd).controllerGains.localSFBDissLMI{iInd} = K_ii;
                 for j = 1:1:length(previousSubsystems)
                     jInd = previousSubsystems(j);
-                    obj.subsystems(jInd).localStabilizingSFBControllerGains{iInd} = K_jiVals{jInd};
+                    obj.subsystems(jInd).controllerGains.localSFBDissLMI{iInd} = K_jiVals{jInd};
+                    obj.subsystems(iInd).controllerGains.localSFBDissLMI{jInd} = K_ijVals{jInd};
                     
                     K{iInd,jInd} = K_ijVals{jInd};
                     K{jInd,iInd} = K_jiVals{jInd};
@@ -840,6 +918,18 @@ classdef Network < handle
                 if ~isDissipative
                     break
                 end
+            end
+            
+            if isDissipative
+                Kmat = [];
+                for i = 1:1:length(obj.subsystems)
+                    Karray = [];
+                    for j = 1:1:length(obj.subsystems)
+                        Karray = [Karray, K{i,j}];
+                    end
+                    Kmat = [Kmat; Karray];
+                end            
+                K = Kmat;
             end
                     
         end

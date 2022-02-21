@@ -38,10 +38,7 @@ classdef Subsystem < handle
         F = {}
         
         % controller gains
-        localSFBLQRControllerGains % local state feedback controller gains
-        globalSFBLQRControllerGains
-        localStabilizingSFBControllerGains
-        localDissipatingSFBControllerGains
+        controllerGains
         
         % data storage for distributed analysis and synthesis algorithms
         dataToBeDistributed % P_i and \tilde{W}_i in hte case of stability analysis
@@ -52,16 +49,16 @@ classdef Subsystem < handle
     
     methods
         
-        function obj = Subsystem(index,location)
+        function obj = Subsystem(index,location,dims)
             obj.index = index;
             obj.revisedIndex = index; % for now
             obj.location = location;
             
             % stateSpaceDimentions
-            obj.dim_n = 4; % x
-            obj.dim_p = 2; % u
-            obj.dim_q = 2; % w
-            obj.dim_m = 2; % y
+            obj.dim_n = dims.n; % x (n)
+            obj.dim_p = dims.p; % u (p)
+            obj.dim_q = dims.q; % w (q)
+            obj.dim_m = dims.m; % y (m)
         end
         
         function obj = loadParameters(obj,subsystems)
@@ -117,8 +114,11 @@ classdef Subsystem < handle
             for j = 1:1:length(subsystems)
                 if sum(j == obj.neighbors)==1 % j is a neighbor!
                     if j==obj.index
-                        sys1 = rss(n,p,m);
-                        sys2 = rss(n,q,m);
+                        sys1 = rss(n,m,p);
+                        while ~all(abs(real(eig(sys1.A)))>0.1)
+                            sys1 = rss(n,m,p);
+                        end
+                        sys2 = rss(n,m,q);
                         obj.A{j} = sys1.A; % A_ii
                         obj.B{j} = sys1.B;
                         obj.C{j} = sys1.C;
@@ -127,8 +127,11 @@ classdef Subsystem < handle
                         obj.F{j} = 0.1*sys2.D;
                     else
                         [n_j, p_j, q_j, m_j] = subsystems(j).getDimensions();
-                        sys1 = rss(n,p_j,m_j);  % assume n=n_j
-                        sys2 = rss(n,q_j,m_j) ; % assume n=n_j
+                        sys1 = rss(n,m_j,p_j);  % assume n=n_j
+                        while ~all(abs(real(eig(sys1.A)))>0.1)
+                            sys1 = rss(n,m_j,p_j);  % assume n=n_j
+                        end
+                        sys2 = rss(n,m_j,q_j); % assume n=n_j
                         obj.A{j} = 0.1*sys1.A; % A_ij
                         obj.B{j} = 0.1*sys1.B; 
                         obj.C{j} = 0.1*sys1.C;
@@ -152,14 +155,69 @@ classdef Subsystem < handle
             obj.w = zeros(obj.dim_q,1); % initial disturbance
         end
         
+        
+        
+        function obj = loadPassiveParameters(obj,subsystems)
+            n = obj.dim_n; % x
+            p = obj.dim_p; % u
+            q = obj.dim_q; % w
+            m = obj.dim_m; % y
+            
+%             rss(n,p,m,2,length(subsystems)) % random stable state spaces
+            
+            for j = 1:1:length(subsystems)
+                if sum(j == obj.neighbors)==1 % j is a neighbor!
+                    if j==obj.index
+                        sys1 = rss(n,m,p);
+                        while ~isPassive(sys1)
+                            sys1 = rss(n,m,p);
+                        end
+                        sys2 = rss(n,m,q);
+                        obj.A{j} = sys1.A; % A_ii
+                        obj.B{j} = 0.5*sys2.B;
+                        obj.C{j} = sys1.C;
+                        obj.D{j} = 0*sys2.D;
+                        obj.E{j} = sys1.B;
+                        obj.F{j} = sys1.D;
+                    else
+                        [n_j, p_j, q_j, m_j] = subsystems(j).getDimensions();
+                        sys1 = rss(n,m_j,p_j);  % assume n=n_j
+                        while ~isPassive(sys1)
+                            sys1 = rss(n,m_j,p_j);  % assume n=n_j
+                        end
+                        sys2 = rss(n,m_j,q_j); % assume n=n_j
+                        obj.A{j} = 0.1*sys1.A; % A_ij
+                        obj.B{j} = 0*sys2.B; 
+                        obj.C{j} = 0*sys1.C;
+                        obj.D{j} = 0*sys2.D;
+                        obj.E{j} = 0.1*sys1.B;
+                        obj.F{j} = 0*sys1.D;
+                    end
+                else
+                    [n_j, p_j, q_j, m_j] = subsystems(j).getDimensions();
+                    obj.A{j} = zeros(n,n_j); % A_ij
+                    obj.B{j} = zeros(n,p_j); 
+                    obj.C{j} = zeros(m,n_j);
+                    obj.D{j} = zeros(m,p_j);
+                    obj.E{j} = zeros(n,q_j);
+                    obj.F{j} = zeros(m,q_j);
+                end
+            end
+            
+            obj.x = 1*rand(n,1); % initial state            
+            obj.u = zeros(obj.dim_p,1); % initial control
+            obj.w = zeros(obj.dim_q,1); % initial disturbance
+        end
+        
         function output = designLocalSFBLQRControllerGains(obj)
+            
             A = obj.A{obj.index};
             B = obj.B{obj.index};
             Q = 100*eye(obj.dim_n);
             R = 20*eye(obj.dim_p);
             
             [K,~,~] = lqr(A,B,Q,R);
-            obj.localSFBLQRControllerGains = K;
+            obj.controllerGains.localSFBLQR = K;
         end
         
         function [n,p,q,m] = getDimensions(obj) %size of state, input, disturbance and output
@@ -215,14 +273,7 @@ classdef Subsystem < handle
             yNew = sumCx+sumDu+sumFw;
            
             % control u and disturbance w for the next iteration
-            % uNew = zeros(obj.dim_p,1); % uncontrolled system
-            % uNew = -obj.localSFBLQRControllerGains*xNew; % controlled based on local information A_ii, B_ii and SFB LQR
-            uNew = zeros(obj.dim_p,1);
-            for jInd = 1:1:length(obj.neighbors)
-                j = obj.neighbors(jInd);
-                uNew = uNew - obj.globalSFBLQRControllerGains{j}*subsystems(j).x;
-            end
-            
+            uNew = obj.getControlInput(xNew,subsystems,'uncontrolled')
             
             
             % disturbance w
@@ -241,6 +292,28 @@ classdef Subsystem < handle
             
         end
         
+        function uNew = getControlInput(obj,xNew,subsystems,method)
+            if isequal(method,'uncontrolled')       % uncontrolled system
+                uNew = zeros(obj.dim_p,1); 
+            elseif isequal(method,'localSFBLQR')    % controlled based on local information A_ii, B_ii and SFB LQR
+                uNew = -obj.controllerGains.localSFBLQR*xNew;
+            elseif isequal(method,'gobalSFBLQR')
+                uNew = zeros(obj.dim_p,1);          % control based on desgined global SFB LQR controller gains
+                for jInd = 1:1:length(obj.neighbors)
+                    j = obj.neighbors(jInd);
+                    uNew = uNew - obj.controllerGains.globalSFBLQR{j}*subsystems(j).x;
+                end
+            elseif isequal(method,'gobalSFBStabLMI')
+                
+            elseif isequal(method,'gobalSFBDissLMI')
+                
+            elseif isequal(method,'localSFBStabLMI')
+                
+            elseif isequal(method,'localSFBDissLMI')
+                
+            end
+        
+        end
         
         
         function outputArg = finishUpdate(obj)
@@ -253,7 +326,7 @@ classdef Subsystem < handle
         end
         
         
-        
+        %% An old local stability check approach
         function isFeasible = checkStability(obj,previousSubsystems,subsystems)
             i = length(previousSubsystems)+1;
             iInd = obj.index;
@@ -382,7 +455,7 @@ classdef Subsystem < handle
         end
         
         
-        % check the positive definiteness of the network version of the obj.testMatrix
+        %% check the positive definiteness of the network version of the obj.testMatrix
         function isPositiveDefinite = checkPositiveDefiniteness(obj, previousSubsystems, subsystems)
             i = length(previousSubsystems)+1;
             iInd = obj.index;
@@ -435,6 +508,12 @@ classdef Subsystem < handle
 %                 scriptA_i
                 M1_i = inv(scriptD_i*scriptA_i);
                 M_i = scriptA_i'*scriptD_i'*scriptA_i;
+                if issymmetric(scriptD_i) & issymmetric(scriptA_i) & ~issymmetric(M_i)
+                    tf = norm(M_i-M_i.',inf);
+                    disp(['Symmetry Error !!! Magnitude:',num2str(tf)]);
+                    % M_i
+                    M_i = 0.5*(M_i + M_i');
+                end
                 
                 % W_i term
                 W_i = [];
@@ -464,7 +543,7 @@ classdef Subsystem < handle
             end
         end
         
-        
+        %% Local stability check: LMI approach
         % The alternative approach to check the stability (via schur's compliment)
         function isFeasible = checkStability2(obj,previousSubsystems,subsystems)
             i = length(previousSubsystems)+1;
@@ -488,7 +567,8 @@ classdef Subsystem < handle
                 [tmin,Psol] = feasp(lmisys); % Solve the LMI system
                 isFeasible = tmin <= 0; % strictly feasible if this is satisfied
                 P_i = dec2mat(lmisys,Psol,P); % This needs to be stored
-                tildeW_i = -A_ii'*P_i - P_i*A_ii; % Note that here, \tilde{W}_ii = W_ii = \tilde{W}_i. This also needs to be stored
+                disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.'])
+                tildeW_i = -A_ii'*P_i - P_i*A_ii % Note that here, \tilde{W}_ii = W_ii = \tilde{W}_i. This also needs to be stored
                 % LMI End
                 
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
@@ -533,11 +613,19 @@ classdef Subsystem < handle
                     end                    
                 end
                 disp(['Data at ',num2str(iInd),' after ',num2str(previousSubsystems),'.'])
-%                 scriptD_i
-%                 scriptA_i
+                scriptA_i;
+                scriptD_i;
+                
                 M1_i = inv(scriptD_i*scriptA_i);
-%                 M_i = inv(M1_i*scriptD_i*M1_i'); % THis fills (i-1)x(i-1) blocks in the LMI
-                M_i = scriptA_i'*scriptD_i'*scriptA_i;
+                % M_i = inv(M1_i*scriptD_i*M1_i') % THis fills (i-1)x(i-1) blocks in the LMI
+                M_i = scriptA_i'*scriptD_i*scriptA_i;
+                if issymmetric(scriptD_i) & issymmetric(scriptA_i) & ~issymmetric(M_i)
+                    tf = norm(M_i-M_i.',inf);
+                    disp(['Symmetry Error !!! Magnitude:',num2str(tf)]);
+                    % M_i
+                    M_i = 0.5*(M_i + M_i');
+                end
+                % save('test','M_i','scriptD_i','scriptA_i')
                 
                 % Filling M_i
                 for x=1:1:length(previousSubsystems)
@@ -577,6 +665,7 @@ classdef Subsystem < handle
                 
                 % Completing the LMI
                 lmisys = getlmis;
+%                 options = [0,0,100,0,0]; %omit,maxiter,rad,...
                 [tmin,Psol] = feasp(lmisys); % Solve the LMI system
                 isFeasible = tmin <= 0; % strictly feasible if this is satisfied
                 P_i = dec2mat(lmisys,Psol,P); % This needs to be stored
@@ -604,7 +693,8 @@ classdef Subsystem < handle
                 W_ii = -A_ii'*P_i - P_i*A_ii;
                 
                 tildeW_ii = W_ii - tildeW_i*scriptD_i*tildeW_i'; % Note that here, \tilde{W}_ii, W_ii, \tilde{W}_i are different.
-                tildeW_i = [tildeW_i, tildeW_ii];
+                disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.'])
+                tildeW_i = [tildeW_i, tildeW_ii]
 
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
                 obj.dataToBeDistributed.P = P_i; % Storing
@@ -618,8 +708,7 @@ classdef Subsystem < handle
         end
         
         
-        
-        % Check QSR-Dissipativity
+        %% Local QSR-Dissipativity check: LMI approach
         function isFeasible = checkQSRDissipativity(obj,previousSubsystems,subsystems)
             i = length(previousSubsystems)+1;
             iInd = obj.index;
@@ -741,6 +830,12 @@ classdef Subsystem < handle
                 M1_i = inv(scriptD_i*scriptA_i);
 %                 M_i = inv(M1_i*scriptD_i*M1_i'); % THis fills 2*(i-1)x2*(i-1) blocks in the LMI
                 M_i = scriptA_i'*scriptD_i'*scriptA_i;
+                if issymmetric(scriptD_i) & issymmetric(scriptA_i) & ~issymmetric(M_i)
+                    tf = norm(M_i-M_i.',inf);
+                    disp(['Symmetry Error !!! Magnitude:',num2str(tf)]);
+                    % M_i
+                    M_i = 0.5*(M_i + M_i');
+                end
                 
                 % Filling M_i
                 for x=1:1:length(previousSubsystems)
@@ -883,7 +978,7 @@ classdef Subsystem < handle
         end
         
         
-        
+        %% Local stabilizing control design LMI approach
         function [isStabilizable,K_ii,K_ijVals,K_jiVals] = designLocalStabilizingSFBControllers(obj,previousSubsystems, subsystems)
             i = length(previousSubsystems)+1;
             iInd = obj.index;
@@ -895,6 +990,8 @@ classdef Subsystem < handle
             B_i = obj.B{iInd};
             dim_n = obj.dim_n;
             dim_p = obj.dim_p; 
+            
+            threshold = 0;
             
             if isempty(previousSubsystems)
                 % The subsystem only need to test W_ii > 0  <==>  Q' W_ii Q > 0 with Q = Q' = P_i^{-1} > 0 
@@ -914,10 +1011,10 @@ classdef Subsystem < handle
                 lmisys = getlmis;
                 
                 [tmin,sol] = feasp(lmisys); % Solve the LMI system
-                isStabilizable = tmin <= 0; % strictly feasible if this is satisfied
+                isStabilizable = tmin < threshold; % strictly feasible if this is satisfied
                 Q_i = dec2mat(lmisys,sol,Q); 
                 L_i = dec2mat(lmisys,sol,L); 
-                P_i = inv(Q_i); % This needs to be stored
+                P_i = eye(dim_n)/Q_i; % This needs to be stored
                 K_ii = L_i*P_i; % This needs to be stored
                 K_jiVals = [];
                 K_ijVals = [];
@@ -926,7 +1023,7 @@ classdef Subsystem < handle
                 
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
                 obj.dataToBeDistributed.P = P_i; % Storing
-                obj.localStabilizingSFBControllerGains{iInd} = K_ii;
+                obj.controllerGains.localSFBStabLMI{iInd} = K_ii;
                 
                 if ~isStabilizable
                     disp(['Not stabilizable at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
@@ -951,7 +1048,7 @@ classdef Subsystem < handle
                 end
                 L = lmivar(2,[dim_n,dim_n]); % For L_i = P_i B_i K_ii  
                 
-                % W_ii term: W_ii = - A_{ii}^T P_i - P_iA_{ii} - K_{ii}^T B_i^T P_i - P_iB_iK_{ii}
+%                 W_ii term: W_ii = - A_{ii}^T P_i - P_iA_{ii} - K_{ii}^T B_i^T P_i - P_iB_iK_{ii}
                 % W_ii = - A_{ii}^T P_i - P_iA_{ii} - L' - L
                 lmiterm([-1, 1, 1, P],-1,A_ii,'s'); % defines -(-PA-A'P)<0; here "s" flag is used to get the symmetric part of PA.
                 lmiterm([-1, 1, 1, L],-1,1,'s'); % defines -(-PA-A'P)<0; here "s" flag is used to get the symmetric part of PA.
@@ -979,12 +1076,18 @@ classdef Subsystem < handle
                         scriptD_i = [scriptD_i, [z; inv(tildeW_jj); Z]];         % The j-th column of \mathcal{D}_i.
                     end                    
                 end
-%                 disp(['Data at ',num2str(iInd),' after ',num2str(previousSubsystems),'.'])
-%                 scriptD_i
-%                 scriptA_i
+                disp(['Data at ',num2str(iInd),' after ',num2str(previousSubsystems),'.'])
+                scriptD_i
+                scriptA_i
                 M1_i = inv(scriptD_i*scriptA_i);
                 % M_i = inv(M1_i*scriptD_i*M1_i'); % THis fills (i-1)x(i-1) blocks in the LMI
-                M_i = scriptA_i'*scriptD_i'*scriptA_i;
+                M_i = scriptA_i'*scriptD_i*scriptA_i;
+                if issymmetric(scriptD_i) & issymmetric(scriptA_i) & ~issymmetric(M_i)
+                    tf = norm(M_i-M_i.',inf);
+                    disp(['Symmetry Error !!! Magnitude:',num2str(tf)]);
+                    % M_i
+                    M_i = 0.5*(M_i + M_i');
+                end
                 
                 % Filling M_i
                 for x=1:1:length(previousSubsystems)
@@ -1036,11 +1139,12 @@ classdef Subsystem < handle
                 % Completing the LMI
                 lmisys = getlmis;
                 [tmin,sol] = feasp(lmisys); % Solve the LMI system
-                isStabilizable = tmin <= 0; % strictly feasible if this is satisfied
+                isStabilizable = tmin < threshold; % strictly feasible if this is satisfied
                 P_i = dec2mat(lmisys,sol,P); % This needs to be stored
+%                 B_i
                 L_i = dec2mat(lmisys,sol,L); % L_i = P_i B_i K_ii
-                K_ii = pinv(B_i)*inv(P_i)*L_i;
-                obj.localStabilizingSFBControllerGains{iInd} = K_ii;
+                K_ii = pinv(B_i)*inv(P_i)*L_i;  % same as (B_i'*B_i)\B_i'*inv(P_i)*L_i
+                obj.controllerGains.localSFBStabLMI{iInd} = K_ii;
                 for j = 1:1:length(previousSubsystems)
                     jInd = previousSubsystems(j);
                     % L_ij = P_i B_i K_ij
@@ -1049,7 +1153,7 @@ classdef Subsystem < handle
                     K_ij = pinv(B_i)*inv(P_i)*L_ij;
                     K_ijVals{jInd} = K_ij;
                     L_ijVals{jInd} = L_ij;
-                    obj.localStabilizingSFBControllerGains{jInd} = K_ij;
+                    obj.controllerGains.localSFBStabLMI{jInd} = K_ij;
                     
                     % L_ji = K_ji^T
                     % L_ji = dec2mat(lmisys,sol,L_ji); 
@@ -1077,15 +1181,20 @@ classdef Subsystem < handle
                     L_ij = L_ijVals{jInd};
                     L_ji = L_jiVals{jInd};
                     % Filling W_ij = -A_{ji}^T P_j - P_iA_{ij} - L_ji B_j^T P_j - L_ij
-                    W_ij = -P_i*A_ij - A_ji'*P_j - L_ji*B_j'*P_j - L_ij;
                     % W_ij = -A_{ji}^T P_j - P_iA_{ij} - K_{ji}^T B_j^T P_j - P_iB_iK_{ij}
-                    % W_ij = -P_i*A_ij - A_ji'*P_j - K_ji'*B_j'*P_j - P_i*B_i*K_ij;
+%                     W_ij = -P_i*A_ij - A_ji'*P_j - K_ji'*B_j'*P_j - P_i*B_i*K_ij
+                    W_ij = -P_i*A_ij - A_ji'*P_j - L_ji*B_j'*P_j - L_ij;
+%                     W_ijE-W_ij
+%                     norm(W_ijE-W_ij)
                     W_i = [W_i, W_ij];
                 end
                 tildeW_i = W_i*M1_i;
                 
                 % W_ii term: - A_{ii}^T P_i - P_iA_{ii} - K_{ii}^T B_i^T P_i - P_iB_iK_{ii}
-                W_ii = -A_ii'*P_i - P_i*A_ii - K_ii'*B_i'*P_i - P_i*B_i*K_ii;
+%                 W_ii = -A_ii'*P_i - P_i*A_ii - K_ii'*B_i'*P_i - P_i*B_i*K_ii
+                W_ii = -A_ii'*P_i - P_i*A_ii - L_i' - L_i;
+%                 W_iiE-W_ii
+%                 norm(W_iiE-W_ii)
                 
                 tildeW_ii = W_ii - tildeW_i*scriptD_i*tildeW_i'; % Note that here, \tilde{W}_ii, W_ii, \tilde{W}_i are different.
                 tildeW_i = [tildeW_i, tildeW_ii];
@@ -1101,13 +1210,14 @@ classdef Subsystem < handle
         
         
         
-        
+        %% Local dissipative controller design using LMIs
         function [isDissipative,K_ii,K_ijVals,K_jiVals] = designLocalDissipatingSFBControllers(obj,previousSubsystems, subsystems)
             i = length(previousSubsystems)+1;
             iInd = obj.index;
             disp(['Dissipating at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
             
             A_ii = obj.A{iInd};
+            B_i = obj.B{iInd};
             C_i = obj.C{iInd};
             E_ii = obj.E{iInd};
             F_i = obj.F{iInd};
@@ -1137,7 +1247,7 @@ classdef Subsystem < handle
                 % LMI Start
                 setlmis([]);  % To initialize the LMI description
                 P = lmivar(1,[dim_n, 1]);   % P is a variable, 1: square symmetric, size(A,1) gives the size and 1 gives that Q is a full matrix 
-                L = lmivar(2,[dim_p,dim_n])      % L_i = P_i B_i K_ii is a variable, rectangular matrix
+                L = lmivar(2,[dim_n,dim_n])      % L_i = P_i B_i K_ii is a variable, rectangular matrix
                 
                 % W_ii1 = -A_{ii}^T P_i -K_{ii}^T B_i^T P_i - P_iA_{ii} - P_i B_i K_{ii} + C_i^T Q_{ii} C_i
                 % W_ii1 = -A_{ii}^T P_i -L_i^T - P_iA_{ii} - L_i + C_i^T Q_{ii} C_i
@@ -1176,7 +1286,7 @@ classdef Subsystem < handle
                 
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
                 obj.dataToBeDistributed.P = P_i; % Storing
-                obj.localStabilizingSFBControllerGains{iInd} = K_ii;
+                obj.controllerGains.localSFBDissLMI{iInd} = K_ii;
                 if ~isDissipative
                     disp(['Not dissipative at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 end
@@ -1244,6 +1354,12 @@ classdef Subsystem < handle
                 M1_i = inv(scriptD_i*scriptA_i);
                 % M_i = inv(M1_i*scriptD_i*M1_i'); % THis fills 2*(i-1)x2*(i-1) blocks in the LMI
                 M_i = scriptA_i'*scriptD_i'*scriptA_i;
+                if issymmetric(scriptD_i) & issymmetric(scriptA_i) & ~issymmetric(M_i)
+                    tf = norm(M_i-M_i.',inf);
+                    disp(['Symmetry Error !!! Magnitude:',num2str(tf)]);
+                    % M_i
+                    M_i = 0.5*(M_i + M_i');
+                end
                 
                 % Filling M_i
                 for x=1:1:length(previousSubsystems)
@@ -1335,7 +1451,7 @@ classdef Subsystem < handle
                 P_i = dec2mat(lmisys,sol,P); % This needs to be stored
                 L_i = dec2mat(lmisys,sol,L); % L_i = P_i B_i K_ii
                 K_ii = pinv(B_i)*inv(P_i)*L_i;
-                obj.localStabilizingSFBControllerGains{iInd} = K_ii;
+                obj.controllerGains.localSFBDissLMI{iInd} = K_ii;
                 for j = 1:1:length(previousSubsystems)
                     jInd = previousSubsystems(j);
                     % L_ij = P_i B_i K_ij
@@ -1344,7 +1460,7 @@ classdef Subsystem < handle
                     K_ij = pinv(B_i)*inv(P_i)*L_ij;
                     K_ijVals{jInd} = K_ij;
                     L_ijVals{jInd} = L_ij;
-                    obj.localStabilizingSFBControllerGains{jInd} = K_ij;
+                    obj.controllerGains.localSFBDissLMI{jInd} = K_ij;
                     
                     % L_ji = K_ji^T
                     % L_ji = dec2mat(lmisys,sol,L_ji); 
@@ -1398,14 +1514,7 @@ classdef Subsystem < handle
                 
                 % W_ii term
                 % W_ii1 = -A_{ii}^T P_i -K_{ii}^T B_i^T P_i - P_iA_{ii} - P_i B_i K_{ii} + C_i^T Q_{ii} C_i
-                % W_ii2 = -P_i E_{ii} + C_i^T S_{ii} + C_i^T Q_{ii} F_i
-                % W_ii3 = -E_{ii}^T P_i + S_{ii}^T C_i + F_i^T Q_{ii}^T C_i  
-                % W_ii4 = F_i^T Q_{ii} F_i + (F_i^T S_{ii} + S_{ii}^T F_i) + R_{ii}
-                
-                
-                
-                % W_ii1 = -A_{ii}^T P_i -K_{ii}^T B_i^T P_i - P_iA_{ii} - P_i B_i K_{ii} + C_i^T Q_{ii} C_i
-                W_ii1 = -A_ii'*P_i - P_i*A_ii + C_i'*Q_ii*C_i - L_i - L_i';
+                W_ii1 = -A_ii'*P_i - P_i*A_ii + C_i'*Q_ii*C_i - L_i - L_i'; % L_i = P_i B_i K_{ii}
                 % W_ii2 = -P_i E_{ii} + C_i^T S_{ii} + C_i^T Q_{ii} F_i
                 W_ii2 = -P_i*E_ii + C_i'*S_ii + C_i'*Q_ii*F_i;
                 % W_ii3 = -E_{ii}^T P_i + S_{ii}^T C_i + F_i^T Q_{ii}^T C_i 
@@ -1420,10 +1529,12 @@ classdef Subsystem < handle
 
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
                 obj.dataToBeDistributed.P = P_i; % Storing
-                if ~isFeasible
-                    disp(['LMI is not feasible at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
+                if ~isDissipative
+                    disp(['Not dissipative at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 end
+                
             end
+            
         end
             
             
