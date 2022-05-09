@@ -72,9 +72,10 @@ classdef Network < handle
             
             % Loading subsystem parameters
             for i = 1:1:numOfSubsystems
-%                 obj.subsystems(i).loadParameters(obj.subsystems);
+                obj.subsystems(i).loadParameters(obj.subsystems);
 %                 obj.subsystems(i).loadStableParameters(obj.subsystems);
-                obj.subsystems(i).loadPassiveParameters(obj.subsystems); % this was used in P1
+%                 obj.subsystems(i).loadPassiveParameters(obj.subsystems); % this was used in the Med conf paper
+                
                 obj.subsystems(i).designLocalSFBLQRControllerGains(); % find local state feedback LQR controller gains
                 
             end
@@ -857,7 +858,8 @@ classdef Network < handle
             for i = 1:1:length(indexing)
                 iInd = indexing(i);
                 previousSubsystems = indexing(1:i-1);                
-                [isStabilizable,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).designLocalStabilizingSFBControllers(previousSubsystems, obj.subsystems);
+                % [isStabilizable,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).designLocalStabilizingSFBControllers(previousSubsystems, obj.subsystems);
+                [isStabilizable,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).designLocalStabilizingSFBControllers2(previousSubsystems, obj.subsystems);
                 
                 K{iInd,iInd} = K_ii;
                 obj.subsystems(iInd).controllerGains.localSFBStabLMI{iInd} = K_ii;
@@ -891,7 +893,7 @@ classdef Network < handle
         end
         
         
-        % Stabilizing state-feedback controller design
+        % Dissipating state-feedback controller design
         function [K, isDissipative] = designLocalDissipatingSFBControllers(obj,indexing)
         
             if isempty(indexing)

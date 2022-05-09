@@ -15,10 +15,10 @@ communicationRadius = 0.9;
 
 % subsystem dims
 for i = 1:1:numOfSubsystems
-    dims{i}.n = 4; % x
-    dims{i}.p = 3; % u
-    dims{i}.q = 2; % w  
-    dims{i}.m = 1; % y
+    dims{i}.n = 2; % x 4
+    dims{i}.p = 2; % u 3
+    dims{i}.q = 2; % w 2 
+    dims{i}.m = 1; % y 1
 end
 
 
@@ -28,11 +28,11 @@ goodCount1 = 0;
 errorCount21 = 0;
 errorCount22 = 0;
 goodCount2 = 0;
-numOfTests = 200;
+numOfTests = 100;
 iList1 = [];
 iList2 = [];
 iList3 = [];
-for i = 100 %1:1:numOfTests %48, 782 %544
+for i = 1:1:numOfTests %48, 782 %544
     i
     % rand('seed',7);
     rng(i)
@@ -43,7 +43,7 @@ for i = 100 %1:1:numOfTests %48, 782 %544
 %     close all
 %     network.drawNetwork(1,true);
 
-    [bestIndexing, minCost, worstIndexing, maxCost, basicIndexingCost] = network.findOptimumIndexing()
+%     [bestIndexing, minCost, worstIndexing, maxCost, basicIndexingCost] = network.findOptimumIndexing()
     % network.drawIndexing(bestIndexing)
     % network.drawIndexing(worstIndexing)
 
