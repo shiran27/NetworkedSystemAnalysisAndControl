@@ -1243,79 +1243,129 @@ classdef Subsystem < handle
             R_ii = obj.dataToBeDistributed.R{iInd};
             
             A_ii = obj.A{iInd};
+            
+            
+            C_ii = obj.C{iInd};
+            E_ii = obj.E{iInd};
+            F_ii = obj.F{iInd};
+            
+            
+            
+            
+            A = obj.networkMatrices.A;
             if isequal(dissFrom,'u')  
-                B_ii = obj.B{iInd};
+                B = obj.networkMatrices.B;
                 if isequal(dissTo,'y')
-                    C_ii = obj.C{iInd};
-                    D_ii = obj.D{iInd};
+                    C = obj.networkMatrices.C;
+                    D = obj.networkMatrices.D;
                 elseif isequal(dissTo,'z')
-                    C_ii = obj.G{iInd};
-                    D_ii = obj.H{iInd};
+                    C = obj.networkMatrices.G;
+                    D = obj.networkMatrices.H;
                 end                
             elseif isequal(dissFrom,'w')
-                B_ii = obj.E{iInd};
+                B = obj.networkMatrices.E;
                 if isequal(dissTo,'y')
-                    C_ii = obj.C{iInd};
-                    D_ii = obj.F{iInd};
+                    C = obj.networkMatrices.C;
+                    D = obj.networkMatrices.F;                    
                 elseif isequal(dissTo,'z')
-                    C_ii = obj.G{iInd};
-                    D_ii = obj.J{iInd};
+                    C = obj.networkMatrices.G;
+                    D = obj.networkMatrices.J;
                 end
             end
-                        
-            n_i = size(A_ii,1);
-                       
             
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            % For Dissipativity: W_ij = [W_ij1, W_ij2; W_ij3, W_ij4]
+            % W_ij1 = -A_{ji}^T P_j - P_iA_{ij} + C_i^\T Q_{ij} C_j;
+            % W_ij2 = -P_i E_{ij} + C_i^\T S_{ij} + C_i^\T Q_{ij} F_j;
+            % W_ij3 = -E_{ji}^\T P_j + S_{ji}^\T C_j + F_i^\T Q_{ji}^\T C_j;
+            % W_ij4 = F_i^\T Q_{ij} F_j + (F_i^\T S_{ij} + S_{ji}^\T F_j) + R_{ij};
             
             if isempty(previousSubsystems)
-                % The subsystem only need to test W_ii
-                % W_ii = -A_ii^T P_i - P_i A_ii
+                % The subsystem only need to test W_ii > 0
+                % W_ii = [W_ii1, W_ii2; W_ii3, W_ii4]
+                % W_ii1 = -A_{ii}^T P_i - P_iA_{ii} + C_i^\T Q_{ii} C_i;
+                % W_ii2 = -P_i E_{ii} + C_i^\T S_{ii} + C_i^\T Q_{ii} F_i;
+                % W_ii3 = -E_{ii}^\T P_i + S_{ii}^\T C_i + F_i^\T Q_{ii}^\T C_i;
+                % W_ii4 = F_i^\T Q_{ii} F_i + (F_i^\T S_{ii} + S_{ii}^\T F_i) + R_{ii};
+                
                 % we need M = W_ii>0 and P_i > 0
                 
-                P_ii = sdpvar(n_i,n_i);
+                % LMI Start
+                setlmis([]);  % To initialize the LMI description
+                P = lmivar(1,[size(A_ii,1), 1]); % P is the variable, 1: square symmetric, size(A,1) gives the size and 1 gives that P is a full matrix 
                 
+                % W_ii1 = -A_{ii}^T P_i - P_iA_{ii} + C_i^\T Q_{ii} C_i
+                lmiterm([-1, 1, 1, P],-1,A_ii,'s'); 
+                matTemp1 = C_ii'*Q_ii*C_ii;
+                lmiterm([-1, 1, 1, 0],matTemp1);
+                % W_ii2 = -P_i E_{ii} + C_i^\T S_{ii} + C_i^\T Q_{ii} F_i;
+                lmiterm([-1, 1, 2, P],-1,E_ii); 
+                matTemp2 = C_ii'*S_ii + C_ii'*Q_ii*F_ii;
+                lmiterm([-1, 1, 2, 0],matTemp2); 
+                % W_ii3 = -E_{ii}^\T P_i + S_{ii}^\T C_i + F_i^\T Q_{ii}^\T C_i;
+                lmiterm([-1, 2, 1, P],-E_ii',1);
+                lmiterm([-1, 2, 1, 0],matTemp2'); 
+                % W_ii4 = F_i^\T Q_{ii} F_i + (F_i^\T S_{ii} + S_{ii}^\T F_i) + R_{ii};
+                matTemp4 = F_ii'*Q_ii*F_ii + (F_ii'*S_ii+S_ii'*F_ii) + R_ii;
+                lmiterm([-1, 2, 2, 0],matTemp4);
                 
+                % P>0
+                lmiterm([-2, 1, 1, P],1,1); % defines -P<0
+                lmisys = getlmis;
+                [tmin,Psol] = feasp(lmisys); % Solve the LMI system
+                isFeasible = tmin <= 0; % strictly feasible if this is satisfied
                 
+                P_i = dec2mat(lmisys,Psol,P); % This needs to be stored
+                tildeW_ii1 = -A_ii'*P_i - P_i*A_ii + matTemp1;
+                tildeW_ii2 = -P_i*E_ii + matTemp2;
+                tildeW_ii3 = tildeW_ii2';
+                tildeW_ii4 = matTemp4;
+                tildeW_i = [tildeW_ii1, tildeW_ii2; tildeW_ii3, tildeW_ii4]; % Note that here, \tilde{W}_ii = W_ii = \tilde{W}_i. This also needs to be stored
+                % LMI End
                 
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                W_ii = -A_ii'*P_ii - P_ii*A_ii;
-                
-                
-                
-                
-                con1 = P_ii >= 0;
-                con2 = W_ii >= 0;
-                sol = optimize([con1,con2],[],solverOptions);
-                isFeasible = sol.problem==0;
-                
-                P_iiVal = value(P_ii);
-                W_iiVal = value(W_ii);
-                tildeW_i = W_iiVal; % Note that, here, \tilde{W}_ii = W_ii = \tilde{W}_i. This also needs to be stored
-                
-                disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
-                obj.dataToBeDistributed.P = P_ii; % Storing
+                obj.dataToBeDistributed.P = P_i; % Storing
                 if ~isFeasible
                     disp(['LMI is not feasible at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 end
-            
+                   
             else
+                disp("Here!!!")
                 % This subsystem has to talk with all the previosSubsystems
-                % tildeW_ii > 0 iff [M_i, W_i'; W_i, W_ii] > 0 is required where 
-                % M_i = inv((scriptD_i*scriptA_i^T)^{-1}*(scriptD_i)*(scriptD_i*scriptA_i^T)^{-1}')
+                % tildeW_ii > 0 iff [W_ii, W_i; W_i', M_i] > 0 is required where 
+                % M_i = inv((scriptD_i*scriptA_i)^{-1}*(scriptD_i)*(scriptD_i*scriptA_i)^{-1}')
                 
-                % M_i term
-                blockSize = obj.dim_n; 
+                % LMI Start
+                setlmis([]);  % To initialize the LMI description
+                P = lmivar(1,[size(A_ii,1), 1]); % P is the variable, 1: square symmetric, size(A,1) gives the size and 1 gives that P is a full matrix 
+                                
+                % W_ii term
+                % W_ii1 = -A_{ii}^T P_i - P_iA_{ii} + C_i^\T Q_{ii} C_i
+                lmiterm([-1, 1, 1, P],-1,A_ii,'s'); 
+                matTemp1 = C_ii'*Q_ii*C_ii;
+                lmiterm([-1, 1, 1, 0],matTemp1);
+                % W_ii2 = -P_i E_{ii} + C_i^\T S_{ii} + C_i^\T Q_{ii} F_i;
+                lmiterm([-1, 1, 2, P],-1,E_ii); 
+                matTemp2 = C_ii'*S_ii + C_ii'*Q_ii*F_ii;
+                lmiterm([-1, 1, 2, 0],matTemp2); 
+                % W_ii3 = -E_{ii}^\T P_i + S_{ii}^\T C_i + F_i^\T Q_{ii}^\T C_i;
+                lmiterm([-1, 2, 1, P],-E_ii',1);
+                lmiterm([-1, 2, 1, 0],matTemp2'); 
+                % W_ii4 = F_i^\T Q_{ii} F_i + (F_i^\T S_{ii} + S_{ii}^\T F_i) + R_{ii};
+                matTemp4 = F_ii'*Q_ii*F_ii + (F_ii'*S_ii+S_ii'*F_ii) + R_ii;
+                lmiterm([-1, 2, 2, 0],matTemp4);
+                
+                
+                % M_i term = inv((scriptD_i*scriptA_i)^{-1}*(scriptD_i)*(scriptD_i*scriptA_i)^{-1}')
+                blockSize = obj.dim_n+obj.dim_q; 
                 scriptA_i = [];
                 scriptD_i = [];
                 for j = 1:1:length(previousSubsystems)
@@ -1324,27 +1374,22 @@ classdef Subsystem < handle
                     % Getting stored info from jInd to create \mathcal{A}_i and \mathcal{D}_i matrices (their j-th columns)
                     tildeW_j = subsystems(jInd).dataToBeDistributed.tildeW;
                                         
-                    Z = zeros(blockSize, blockSize*(i-1-j)); % (i-1)-j blocks of blockSize X blockSize zero matrices
-                    z = zeros(blockSize, blockSize*(j-1));
+                    Z = zeros(blockSize*(i-1-j),blockSize); % (i-1)-j blocks of blockSizeXblockSize zero matrices
+                    z = zeros(blockSize*(j-1),blockSize);
                     if j==1
                         tildeW_jj = tildeW_j;                    
-                        scriptA_i = [tildeW_jj, Z];         % The first row of \mathcal{A}_i.
-                        scriptD_i = [inv(tildeW_jj), Z];    % The first row of \mathcal{D}_i.
+                        scriptA_i = [tildeW_jj; Z];         % The first column of \mathcal{A}_i.
+                        scriptD_i = [inv(tildeW_jj); Z];    % The first column of \mathcal{D}_i.
                     else
                         tildeW_jj = tildeW_j(:,blockSize*(j-1)+1:blockSize*j);   % last blockSizeXblockSize block in the row block vector
                         tildeW_j  = tildeW_j(:,1:blockSize*(j-1));                % first (j-1) blocks in the row block vector
-                        scriptA_i = [scriptA_i; [tildeW_j, tildeW_jj, Z]];    % The j-th row of \mathcal{A}_i.
-                        scriptD_i = [scriptD_i; [z, inv(tildeW_jj), Z]];         % The j-th row of \mathcal{D}_i.
+                        scriptA_i = [scriptA_i, [tildeW_j'; tildeW_jj ; Z]];    % The j-th column of \mathcal{A}_i.
+                        scriptD_i = [scriptD_i, [z; inv(tildeW_jj); Z]];         % The j-th column of \mathcal{D}_i.
                     end                    
                 end
-                disp(['Data at ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
-                scriptA_i;
-                scriptD_i;                
-                
-                M1_i = inv(scriptD_i*scriptA_i');
-                % M_i = inv(M1_i*scriptD_i*M1_i') % THis fills (i-1)x(i-1) blocks in the LMI
-                M_i = scriptA_i*scriptD_i*scriptA_i';
-                              
+                M1_i = inv(scriptD_i*scriptA_i);
+%                 M_i = inv(M1_i*scriptD_i*M1_i'); % THis fills 2*(i-1)x2*(i-1) blocks in the LMI
+                M_i = scriptA_i'*scriptD_i'*scriptA_i;
                 if issymmetric(scriptD_i) & issymmetric(scriptA_i) & ~issymmetric(M_i)
                     tf = norm(M_i-M_i.',inf);
                     disp(['Symmetry Error !!! Magnitude:',num2str(tf)]);
@@ -1352,45 +1397,142 @@ classdef Subsystem < handle
                     M_i = 0.5*(M_i + M_i');
                 end
                 
+                % Filling M_i
+                for x=1:1:length(previousSubsystems)
+                    m_x = (x-1)*blockSize; % exact index
+                    n_x = 2+2*(x-1)+1;           % block index
+                    for y=1:1:length(previousSubsystems)
+                        m_y = (y-1)*blockSize;  % exact index
+                        n_y = 2+2*(y-1)+1;           % block index
+                        M_i_xy = M_i(m_x+1:m_x+blockSize, m_y+1:m_y+blockSize);
+                        M_i_xy1 = M_i_xy(1:obj.dim_n,1:obj.dim_n);
+                        M_i_xy2 = M_i_xy(1:obj.dim_n,obj.dim_n+1:blockSize);
+                        M_i_xy3 = M_i_xy(obj.dim_n+1:blockSize,1:obj.dim_n);
+                        M_i_xy4 = M_i_xy(obj.dim_n+1:blockSize,obj.dim_n+1:blockSize);
+                        lmiterm([-1, n_x, n_y, 0],M_i_xy1);
+                        lmiterm([-1, n_x, n_y+1, 0],M_i_xy2);
+                        lmiterm([-1, n_x+1, n_y, 0],M_i_xy3);
+                        lmiterm([-1, n_x+1, n_y+1, 0],M_i_xy4);
+                    end
+                end
+               
                 
-                P_ii = sdpvar(n_i,n_i);
-                % W_ii and W_i terms
-                W_ii = -A_ii'*P_ii - P_ii*A_ii;                
+                % W_i term
+                for j = 1:1:length(previousSubsystems)
+                    jInd = previousSubsystems(j);
+
+                    % W_ij term
+                    A_ij = obj.A{jInd};
+                    A_ji = subsystems(jInd).A{iInd};
+                    C_j = subsystems(jInd).C{jInd};
+                    E_ij = obj.E{jInd};
+                    E_ji = subsystems(jInd).E{iInd};
+                    F_j = subsystems(jInd).F{jInd};
+                    P_j = subsystems(jInd).dataToBeDistributed.P;
+                    Q_ij = obj.dataToBeDistributed.Q{jInd};
+                    Q_ji = subsystems(jInd).dataToBeDistributed.Q{iInd};
+                    S_ij = obj.dataToBeDistributed.S{jInd};
+                    S_ji = subsystems(jInd).dataToBeDistributed.S{iInd};
+                    R_ij = obj.dataToBeDistributed.R{jInd};
+                    n_j = 2+2*(j-1)+1;
+                    
+                    % Filling W_ij = [W_ij1, W_ij2; W_ij3, W_ij4]
+                    % W_ij1 = -A_{ji}^T P_j - P_iA_{ij} + C_i^\T Q_{ij} C_j;
+                    lmiterm([-1, 1, n_j, P],-1,A_ij);
+                    matTemp1 = -A_ji'*P_j + C_ii'*Q_ij*C_j;
+                    lmiterm([-1, 1, n_j, 0],matTemp1);
+                    % W_ij2 = -P_i E_{ij} + C_i^\T S_{ij} + C_i^\T Q_{ij} F_j;
+                    lmiterm([-1, 1, n_j+1, P],-1,E_ij); 
+                    matTemp2 = C_ii'*S_ij + C_ii'*Q_ij*F_j;
+                    lmiterm([-1, 1, n_j+1, 0],matTemp2); 
+                    % W_ij3 = -E_{ji}^\T P_j + S_{ji}^\T C_j + F_i^\T Q_{ji}^\T C_j;
+                    matTemp3 = -E_ji'*P_j + S_ji'*C_j + F_ii'*Q_ji'*C_j;
+                    lmiterm([-1, 2, n_j, 0],matTemp3);
+                    % W_ij4 = F_i^\T Q_{ij} F_j + (F_i^\T S_{ij} + S_{ji}^\T F_j) + R_{ij};
+                    matTemp4 = F_ii'*Q_ij*F_j + (F_ii'*S_ij+S_ji'*F_j) + R_ij;
+                    lmiterm([-1, 2, n_j+1, 0],matTemp4);
+                    
+                    % Filling W_ij^T = [W_ij1', W_ij3'; W_ij2', W_ij4']
+                    % W_ij1' = - A_{ij}^T P_i + (-A_{ji}^T P_j + C_i^\T Q_{ij} C_j)^T;
+                    lmiterm([-1, n_j, 1, P],-A_ij',1);
+                    lmiterm([-1, n_j, 1, 0],matTemp1');
+                    % W_ij3' = (-E_{ji}^\T P_j + S_{ji}^\T C_j + F_i^\T Q_{ji}^\T C_j)^T;
+                    lmiterm([-1, n_j, 2, 0],matTemp3');
+                    % W_ij2' = -E_{ij}^T P_i  + (C_i^\T S_{ij} + C_i^\T Q_{ij} F_j)^T;
+                    lmiterm([-1, n_j+1, 1, P],-E_ij',1); 
+                    lmiterm([-1, n_j+1, 1, 0],matTemp2'); 
+                    % W_ij4' = (F_i^\T Q_{ij} F_j + (F_i^\T S_{ij} + S_{ji}^\T F_j) + R_{ij})^T
+                    lmiterm([-1, n_j+1, 2, 0],matTemp4');
+                    
+                end
+
+                % P term
+                lmiterm([-2, 1, 1, P],1,1); % defines -P<0
+                
+                % Completing the LMI
+                lmisys = getlmis;
+                [tmin,Psol] = feasp(lmisys); % Solve the LMI system
+                isFeasible = tmin <= 0; % strictly feasible if this is satisfied
+                P_i = dec2mat(lmisys,Psol,P); % This needs to be stored
+                % LMI End
+                
+                % Need to compute \tilede{W}_i and \tilde{W}_{ii} for storage
+                
+                % W_i term
                 W_i = [];
                 for j = 1:1:length(previousSubsystems)
                     jInd = previousSubsystems(j);
 
                     % W_ij term
                     A_ij = obj.A{jInd};
-                    A_ji = subsystems(jInd).A{iInd};                    
-                    P_jj = subsystems(jInd).dataToBeDistributed.P;
-                    n_j = 1+(j-1)+1;
+                    A_ji = subsystems(jInd).A{iInd};
+                    C_j = subsystems(jInd).C{jInd};
+                    E_ij = obj.E{jInd};
+                    E_ji = subsystems(jInd).E{iInd};
+                    F_j = subsystems(jInd).F{jInd};
+                    P_j = subsystems(jInd).dataToBeDistributed.P;
+                    Q_ij = obj.dataToBeDistributed.Q{jInd};
+                    S_ij = obj.dataToBeDistributed.S{jInd};
+                    S_ji = subsystems(jInd).dataToBeDistributed.S{iInd};
+                    R_ij = obj.dataToBeDistributed.R{jInd};
                     
-                    W_ij = -A_ji'*P_jj - P_ii*A_ij;
+                    
+                    % Filling W_ij = [W_ij1, W_ij2; W_ij3, W_ij4]
+                    % W_ij1 = -A_{ji}^T P_j - P_iA_{ij} + C_i^\T Q_{ij} C_j;
+                    W_ij1 = -P_i*A_ij -A_ji'*P_j + C_ii'*Q_ij*C_j;
+                    % W_ij2 = -P_i E_{ij} + C_i^\T S_{ij} + C_i^\T Q_{ij} F_j;
+                    W_ij2 = -P_i*E_ij + C_ii'*S_ij + C_ii'*Q_ij*F_j;
+                    % W_ij3 = -E_{ji}^\T P_j + S_{ji}^\T C_j + F_i^\T Q_{ji}^\T C_j;
+                    W_ij3 = -E_ji'*P_j + S_ji'*C_j + F_ii'*Q_ji'*C_j;
+                    % W_ij4 = F_i^\T Q_{ij} F_j + (F_i^\T S_{ij} + S_{ji}^\T F_j) + R_{ij};
+                    W_ij4 = F_ii'*Q_ij*F_j + (F_ii'*S_ij+S_ji'*F_j) + R_ij;
+                    
+                    W_ij = [W_ij1, W_ij2; W_ij3, W_ij4];
                     W_i = [W_i, W_ij];
                 end
+                tildeW_i = W_i*M1_i;
                 
-                con1 = P_ii >= 0;
-                con2 = [M_i, W_i';W_i, W_ii] >= 0;
-                sol = optimize([con1,con2],[],solverOptions);
-                isFeasible = sol.problem==0;
-                P_iiVal = value(P_ii); % This needs to be stored
-                W_iVal = value(W_i);
-                W_iiVal = value(W_ii);
                 
-                % Need to compute \tilede{W}_i and \tilde{W}_{ii} for storage
-                tildeW_i = W_iVal*M1_i;
-                tildeW_ii = W_iiVal - tildeW_i*scriptD_i*tildeW_i'; % Note that here, \tilde{W}_ii, W_ii, \tilde{W}_i are different.
+                % W_ii term
+                % W_ii1 = -A_{ii}^T P_i - P_iA_{ii} + C_i^\T Q_{ii} C_i
+                W_ii1 = -A_ii'*P_i - P_i*A_ii + C_ii'*Q_ii*C_ii;
+                % W_ii2 = -P_i E_{ii} + C_i^\T S_{ii} + C_i^\T Q_{ii} F_i;
+                W_ii2 = -P_i*E_ii + C_ii'*S_ii + C_ii'*Q_ii*F_ii;
+                % W_ii3 = -E_{ii}^\T P_i + S_{ii}^\T C_i + F_i^\T Q_{ii}^\T C_i;
+                W_ii3 = W_ii2';
+                % W_ii4 = F_i^\T Q_{ii} F_i + (F_i^\T S_{ii} + S_{ii}^\T F_i) + R_{ii};
+                W_ii4 = F_ii'*Q_ii*F_ii + (F_ii'*S_ii+S_ii'*F_ii) + R_ii;
                 
-                disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
+                W_ii = [W_ii1, W_ii2; W_ii3, W_ii4];
+                
+                tildeW_ii = W_ii - tildeW_i*scriptD_i*tildeW_i'; % Note that here, \tilde{W}_ii, W_ii, \tilde{W}_i are different.
                 tildeW_i = [tildeW_i, tildeW_ii];
 
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
-                obj.dataToBeDistributed.P = P_ii; % Storing
+                obj.dataToBeDistributed.P = P_i; % Storing
                 if ~isFeasible
                     disp(['LMI is not feasible at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 end
-                
             end
           
         end

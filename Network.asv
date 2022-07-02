@@ -1285,9 +1285,9 @@ classdef Network < handle
                     Cc{jInd,iInd} = CcVals{3}{jInd};
                     
                     obj.subsystems(iInd).controllerGains.decenDOFStabContDc{jInd} = DcVals{2}{jInd};
-                    obj.subsystems(jInd).controllerGains.decenDOFStabContDc{iInd} = DcVals{3}{jInd};                    
-                    Dc{iInd,jInd} = DcVals{2}{jInd};
-                    Dc{jInd,iInd} = DcVals{3}{jInd};
+                    obj.subsystems(jInd).controllerGains.decenDOFStabContDc{iInd} = cVals{3}{jInd};                    
+                    Bc{iInd,jInd} = BcVals{2}{jInd};
+                    Bc{jInd,iInd} = BcVals{3}{jInd};
                 end
                 
                 if ~isDOFStabilizable
@@ -1297,21 +1297,15 @@ classdef Network < handle
             end
             
             if isDOFStabilizable
-                Acmat = []; Bcmat = []; Ccmat = []; Dcmat = [];
+                Kmat = [];
                 for i = 1:1:length(obj.subsystems)
-                    AcArray = []; BcArray = []; CcArray = []; DcArray = [];
+                    Karray = [];
                     for j = 1:1:length(obj.subsystems)
-                        AcArray = [AcArray, Ac{i,j}];
-                        BcArray = [BcArray, Bc{i,j}];
-                        CcArray = [CcArray, Cc{i,j}];
-                        DcArray = [DcArray, Dc{i,j}];
+                        Karray = [Karray, K{i,j}];
                     end
-                    Acmat = [Acmat; AcArray]; 
-                    Bcmat = [Bcmat; BcArray];
-                    Ccmat = [Ccmat; CcArray];
-                    Dcmat = [Dcmat; DcArray];
+                    Kmat = [Kmat; Karray];
                 end
-                Ac = Acmat; Bc = Bcmat; Cc = Ccmat; Dc = Dcmat;
+                K = Kmat;
             end
             
             % Collect all the coefficients
@@ -1324,7 +1318,7 @@ classdef Network < handle
         
         
         % Check QSR-dissipativity of the networked system
-        function output = decentralizedDissipativityAnalysis(obj,dissFrom,dissTo,indexing,solverOptions)
+        function output = decentralizedDissipativityAnalysis(obj,indexing,solverOptions)
             
             if isempty(indexing)
                 indexing = [1:1:length(obj.subsystems)];
@@ -1333,7 +1327,7 @@ classdef Network < handle
             for i = 1:1:length(indexing)
                 iInd = indexing(i);
                 previousSubsystems = indexing(1:i-1);                
-                isQSRDissipative = obj.subsystems(iInd).dissipativityAnalysis(dissFrom,dissTo,previousSubsystems, obj.subsystems, solverOptions);
+                isQSRDissipative = obj.subsystems(iInd).dissipativityAnalysis(previousSubsystems, obj.subsystems, solverOptions);
                 if ~isQSRDissipative
                     output = false;
                     break
