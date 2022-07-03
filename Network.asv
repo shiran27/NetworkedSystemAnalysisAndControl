@@ -1285,9 +1285,9 @@ classdef Network < handle
                     Cc{jInd,iInd} = CcVals{3}{jInd};
                     
                     obj.subsystems(iInd).controllerGains.decenDOFStabContDc{jInd} = DcVals{2}{jInd};
-                    obj.subsystems(jInd).controllerGains.decenDOFStabContDc{iInd} = cVals{3}{jInd};                    
-                    Bc{iInd,jInd} = BcVals{2}{jInd};
-                    Bc{jInd,iInd} = BcVals{3}{jInd};
+                    obj.subsystems(jInd).controllerGains.decenDOFStabContDc{iInd} = DcVals{3}{jInd};                    
+                    Dc{iInd,jInd} = DcVals{2}{jInd};
+                    Dc{jInd,iInd} = DcVals{3}{jInd};
                 end
                 
                 if ~isDOFStabilizable
@@ -1297,15 +1297,21 @@ classdef Network < handle
             end
             
             if isDOFStabilizable
-                Kmat = [];
+                Acmat = []; Bcmat = []; Ccmat = []; Dcmat = [];
                 for i = 1:1:length(obj.subsystems)
-                    Karray = [];
+                    AcArray = []; BcArray = []; CcArray = []; DcArray = [];
                     for j = 1:1:length(obj.subsystems)
-                        Karray = [Karray, K{i,j}];
+                        AcArray = [AcArray, Ac{i,j}];
+                        BcArray = [BcArray, Bc{i,j}];
+                        CcArray = [CcArray, Cc{i,j}];
+                        DcArray = [DcArray, Dc{i,j}];
                     end
-                    Kmat = [Kmat; Karray];
+                    Acmat = [Acmat; AcArray]; 
+                    Bcmat = [Bcmat; BcArray];
+                    Ccmat = [Ccmat; CcArray];
+                    Dcmat = [Dcmat; DcArray];
                 end
-                K = Kmat;
+                Ac = Acmat; Bc = Bcmat; Cc = Ccmat; Dc = Dcmat;
             end
             
             % Collect all the coefficients
@@ -1315,10 +1321,8 @@ classdef Network < handle
         
         %% Decentralized dissipativity related concepts
         
-        
-        
         % Check QSR-dissipativity of the networked system
-        function output = decentralizedDissipativityAnalysis(obj,indexing,solverOptions)
+        function output = decentralizedDissipativityAnalysis(obj,dissFrom,dissTo,indexing,solverOptions)
             
             if isempty(indexing)
                 indexing = [1:1:length(obj.subsystems)];
@@ -1327,7 +1331,7 @@ classdef Network < handle
             for i = 1:1:length(indexing)
                 iInd = indexing(i);
                 previousSubsystems = indexing(1:i-1);                
-                isQSRDissipative = obj.subsystems(iInd).dissipativityAnalysis(previousSubsystems, obj.subsystems, solverOptions);
+                isQSRDissipative = obj.subsystems(iInd).dissipativityAnalysis(dissFrom,dissTo,previousSubsystems, obj.subsystems, solverOptions);
                 if ~isQSRDissipative
                     output = false;
                     break
@@ -1339,10 +1343,8 @@ classdef Network < handle
         end
         
         
-                
-        
         % Dissipating state-feedback controller design
-        function [K, isDissipative] = decentralizedFSFDissipativation(obj,indexing,solverOptions)
+        function [K, isDissipative] = decentralizedFSFDissipativation(obj,dissFrom,dissTo,indexing,solverOptions)
         
             if isempty(indexing)
                 indexing = [1:1:length(obj.subsystems)];
@@ -1352,7 +1354,7 @@ classdef Network < handle
             for i = 1:1:length(indexing)
                 iInd = indexing(i);
                 previousSubsystems = indexing(1:i-1);                
-                [isDissipative,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).FSFDissipativation(previousSubsystems, obj.subsystems, solverOptions);
+                [isDissipative,K_ii,K_ijVals,K_jiVals] = obj.subsystems(iInd).FSFDissipativation(dissFrom,dissTo,previousSubsystems, obj.subsystems, solverOptions);
                 
                 K{iInd,iInd} = K_ii;
                 obj.subsystems(iInd).controllerGains.decenFSFDissCont{iInd} = K_ii;
@@ -1384,6 +1386,122 @@ classdef Network < handle
                     
         end
         
+        
+        
+        % Decentralized dissipatives observer design
+        function [L,isObserverDissipative] = decentralizedDissipativeObserverDesign(obj,dissFrom,dissTo,indexing,solverOptions)
+        
+            if isempty(indexing)
+                indexing = [1:1:length(obj.subsystems)];
+            end
+            
+            for i = 1:1:length(indexing)
+                iInd = indexing(i);
+                previousSubsystems = indexing(1:i-1);                
+                [isObserverDissipative,L_ii,L_ijVals,L_jiVals] = obj.subsystems(iInd).dissipativeObserverDesign(dissFrom, dissTo, previousSubsystems, obj.subsystems, solverOptions);
+                
+                L{iInd,iInd} = L_ii;
+                obj.subsystems(iInd).observerGains.decenDissObs{iInd} = L_ii;
+                for j = 1:1:length(previousSubsystems)
+                    jInd = previousSubsystems(j);
+                    obj.subsystems(jInd).observerGains.decenDissObs{iInd} = L_jiVals{jInd};
+                    obj.subsystems(iInd).observerGains.decenDissObs{jInd} = L_ijVals{jInd};
+                    L{iInd,jInd} = L_ijVals{jInd};
+                    L{jInd,iInd} = L_jiVals{jInd};
+                end
+                
+                if ~isObserverDissipative
+                    break
+                end
+                
+            end
+            
+            if isObserverDissipative
+                Lmat = [];
+                for i = 1:1:length(obj.subsystems)
+                    Larray = [];
+                    for j = 1:1:length(obj.subsystems)
+                        Larray = [Larray, L{i,j}];
+                    end
+                    Lmat = [Lmat; Larray];
+                end
+                L = Lmat;
+            end
+            
+            % Collect all the coefficients
+        end
+        
+        
+        
+        % Decentralized DOF dissipativation
+        function [Ac,Bc,Cc,Dc,isDOFDissipative] = decentralizedDOFDissipativation(obj,dissFrom,dissTo,indexing,solverOptions)
+        
+            if isempty(indexing)
+                indexing = [1:1:length(obj.subsystems)];
+            end
+            
+            for i = 1:1:length(indexing)
+                iInd = indexing(i);
+                previousSubsystems = indexing(1:i-1);                
+                [isDOFDissipative,AcVals,BcVals,CcVals,DcVals] = obj.subsystems(iInd).DOFDissipativation(dissFrom, dissTo,  previousSubsystems, obj.subsystems, solverOptions);
+                
+                Ac{iInd,iInd} = AcVals{1}; %A_c,ii
+                Bc{iInd,iInd} = BcVals{1};
+                Cc{iInd,iInd} = CcVals{1};
+                Dc{iInd,iInd} = DcVals{1};
+                obj.subsystems(iInd).controllerGains.decenDOFDissContAc{iInd} = AcVals{1};
+                obj.subsystems(iInd).controllerGains.decenDOFDissContBc{iInd} = BcVals{1};
+                obj.subsystems(iInd).controllerGains.decenDOFDissContCc{iInd} = CcVals{1};
+                obj.subsystems(iInd).controllerGains.decenDOFDissContDc{iInd} = DcVals{1};
+                for j = 1:1:length(previousSubsystems)
+                    jInd = previousSubsystems(j);
+                    obj.subsystems(iInd).controllerGains.decenDOFDissContAc{jInd} = AcVals{2}{jInd};
+                    obj.subsystems(jInd).controllerGains.decenDOFDissContAc{iInd} = AcVals{3}{jInd};                    
+                    Ac{iInd,jInd} = AcVals{2}{jInd};
+                    Ac{jInd,iInd} = AcVals{3}{jInd};
+                    
+                    obj.subsystems(iInd).controllerGains.decenDOFDissContBc{jInd} = BcVals{2}{jInd};
+                    obj.subsystems(jInd).controllerGains.decenDOFDissContBc{iInd} = BcVals{3}{jInd};                    
+                    Bc{iInd,jInd} = BcVals{2}{jInd};
+                    Bc{jInd,iInd} = BcVals{3}{jInd};
+                    
+                    obj.subsystems(iInd).controllerGains.decenDOFDissContCc{jInd} = CcVals{2}{jInd};
+                    obj.subsystems(jInd).controllerGains.decenDOFDissContCc{iInd} = CcVals{3}{jInd};                    
+                    Cc{iInd,jInd} = CcVals{2}{jInd};
+                    Cc{jInd,iInd} = CcVals{3}{jInd};
+                    
+                    obj.subsystems(iInd).controllerGains.decenDOFDissContDc{jInd} = DcVals{2}{jInd};
+                    obj.subsystems(jInd).controllerGains.decenDOFDissContDc{iInd} = DcVals{3}{jInd};                    
+                    Dc{iInd,jInd} = DcVals{2}{jInd};
+                    Dc{jInd,iInd} = DcVals{3}{jInd};
+                end
+                
+                if ~isDOFDissipative
+                    break
+                end
+                
+            end
+            
+            if isDOFDissipative
+                Acmat = []; Bcmat = []; Ccmat = []; Dcmat = [];
+                for i = 1:1:length(obj.subsystems)
+                    AcArray = []; BcArray = []; CcArray = []; DcArray = [];
+                    for j = 1:1:length(obj.subsystems)
+                        AcArray = [AcArray, Ac{i,j}];
+                        BcArray = [BcArray, Bc{i,j}];
+                        CcArray = [CcArray, Cc{i,j}];
+                        DcArray = [DcArray, Dc{i,j}];
+                    end
+                    Acmat = [Acmat; AcArray]; 
+                    Bcmat = [Bcmat; BcArray];
+                    Ccmat = [Ccmat; CcArray];
+                    Dcmat = [Dcmat; DcArray];
+                end
+                Ac = Acmat; Bc = Bcmat; Cc = Ccmat; Dc = Dcmat;
+            end
+            
+            % Collect all the coefficients
+        end
         
        
     end
