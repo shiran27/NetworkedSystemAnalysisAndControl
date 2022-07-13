@@ -686,7 +686,7 @@ classdef Network < handle
         % Centralized stability analysis
         function isStable = centralizedStabilityAnalysis(obj,solverOptions)
             A = obj.networkMatrices.A;
-            % n = size(A,1);
+            n = size(A,1);
             
             % P = sdpvar(n,n)
             % P = diag(sdpvar(n,1)); % Stability analysis with diagonal matrix
@@ -696,12 +696,12 @@ classdef Network < handle
                 P = blkdiag(P,sdpvar(n_i,n_i));
             end
             
-            con1 = P >= 0;
-            con2 = A'*P + P*A <= 0;
-            sol = optimize([con1,con2],[],solverOptions);
+            con1 = P >= 0.000000001*eye(n);
+            con2 = - A'*P - P*A >= 0;
+            sol = optimize([con1,con2],[],solverOptions)
             isStable = sol.problem==0;
-%             eigs = eig(A)
-%             PVal = value(P)
+            % eigs = eig(A)
+            % PVal = value(P)
         end
         
         
@@ -730,7 +730,7 @@ classdef Network < handle
                         L_i = [L_i,zeros(p_i,n_j)];
                     end
                 end
-                L = [L;L_i];
+                L = [L; L_i];
             end
             
             con1 = M >= 0;
@@ -857,6 +857,7 @@ classdef Network < handle
             Cc = (CnVal-DnVal*C*YVal)/(N');
             Dc = DnVal;
             Abar = [A+B*Dc*C, B*Cc; Bc*C, Ac]; %closed loop system
+            isDOFStabilizable = all(real(eig(Abar))<0);
 %             eigs = eig(Abar)
         end
         
@@ -1122,6 +1123,7 @@ classdef Network < handle
             Cc = (CnVal-DnVal*C*YVal)/(N');
             Dc = DnVal;
             Abar = [A+B*Dc*C, B*Cc; Bc*C, Ac]; %closed loop system
+            
 %             Bbar = [E+B*Dc*F;Bc*F];
 %             Cbar = [G+H*Dc*C, H*Cc];
 %             Dbar = [J+H*Dc*F];
@@ -1312,6 +1314,13 @@ classdef Network < handle
                     Dcmat = [Dcmat; DcArray];
                 end
                 Ac = Acmat; Bc = Bcmat; Cc = Ccmat; Dc = Dcmat;
+                
+                
+                A = obj.networkMatrices.A;
+                B = obj.networkMatrices.B;
+                C = obj.networkMatrices.C;
+                Abar = [A+B*Dc*C, B*Cc; Bc*C, Ac];
+                isDOFStabilizable = all(real(eig(Abar))<0);
             end
             
             % Collect all the coefficients
@@ -1382,6 +1391,11 @@ classdef Network < handle
                     Kmat = [Kmat; Karray];
                 end            
                 K = Kmat;
+                
+            end
+            
+            if ~isDissipative
+                K = zeros(size(obj.networkMatrices.C,1),size(obj.networkMatrices.C,2));
             end
                     
         end

@@ -128,7 +128,7 @@ classdef Subsystem < handle
                     if j==obj.index % j = i
                         sys1 = rss(n,m,p); % n states, m outputs, p inputs 
                         sys2 = rss(n,m,q); % n states, m outputs, q inputs
-                        obj.A{j} = sys1.A*(diags(1)>=0); % A_ii
+                        obj.A{j} = -sys1.A*(diags(1)>=0); % A_ii
                         obj.B{j} = sys1.B*(diags(2)>=0);
                         obj.C{j} = sys1.C*(diags(3)>=0);
                         obj.D{j} = sys1.D*(diags(4)>=0);
@@ -453,7 +453,7 @@ classdef Subsystem < handle
                 
                 P_ii = sdpvar(n_i,n_i);
                 W_ii = -A_ii'*P_ii - P_ii*A_ii;
-                con1 = P_ii >= 0;
+                con1 = P_ii >= 0.000000001*eye(n_i);
                 con2 = W_ii >= 0;
                 sol = optimize([con1,con2],[],solverOptions);
                 isFeasible = sol.problem==0;
@@ -461,6 +461,11 @@ classdef Subsystem < handle
                 P_iiVal = value(P_ii);
                 W_iiVal = value(W_ii);
                 tildeW_i = W_iiVal; % Note that, here, \tilde{W}_ii = W_ii = \tilde{W}_i. This also needs to be stored
+                
+                if abs(det(tildeW_i))<0.000000001
+                    disp("Error: det(tildeW_ii) low");
+                    isFeasible = 0;
+                end
                 
                 disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
@@ -502,6 +507,9 @@ classdef Subsystem < handle
                 scriptD_i;                
                 
                 M1_i = inv(scriptD_i*scriptA_i');
+                % disp('Error')
+                % temp = any(isnan(M1_i(:)))
+                
                 % M_i = inv(M1_i*scriptD_i*M1_i') % THis fills (i-1)x(i-1) blocks in the LMI
                 M_i = scriptA_i*scriptD_i*scriptA_i';
                               
@@ -524,13 +532,13 @@ classdef Subsystem < handle
                     A_ij = obj.A{jInd};
                     A_ji = subsystems(jInd).A{iInd};                    
                     P_jj = subsystems(jInd).dataToBeDistributed.P;
-                    n_j = 1+(j-1)+1;
+                    
                     
                     W_ij = -A_ji'*P_jj - P_ii*A_ij;
                     W_i = [W_i, W_ij];
                 end
                 
-                con1 = P_ii >= 0;
+                con1 = P_ii >= 0.000000001*eye(n_i);
                 con2 = [M_i, W_i';W_i, W_ii] >= 0;
                 sol = optimize([con1,con2],[],solverOptions);
                 isFeasible = sol.problem==0;
@@ -545,6 +553,10 @@ classdef Subsystem < handle
                 disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 tildeW_i = [tildeW_i, tildeW_ii];
 
+                if abs(det(tildeW_ii))<0.000000001
+                    disp("Error: det(tildeW_ii) low");
+                    isFeasible = 0;
+                end
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
                 obj.dataToBeDistributed.P = P_iiVal; % Storing
                 if ~isFeasible
@@ -580,7 +592,7 @@ classdef Subsystem < handle
                 L_ii = sdpvar(p_i,n_i,'full');
                 
                 W_ii = - M_ii*A_ii' - A_ii*M_ii - L_ii'*B_ii' - B_ii*L_ii;
-                con1 = M_ii >= 0;
+                con1 = M_ii >= 0.000000001*eye(n_i);
                 con2 = W_ii >= 0;
                 sol = optimize([con1,con2],[],solverOptions);
                 isStabilizable = sol.problem==0;
@@ -590,6 +602,10 @@ classdef Subsystem < handle
                 W_iiVal = value(W_ii);
                 tildeW_i = W_iiVal; % Note that, here, \tilde{W}_ii = W_ii = \tilde{W}_i. This also needs to be stored
                 
+                if abs(det(tildeW_i))<0.000000001
+                    disp("Error: det(tildeW_ii) low");
+                    isStabilizable = 0;
+                end
                 
                 K_ii = L_iiVal/M_iiVal; % This needs to be stored
                 K_jiVals = [];
@@ -681,7 +697,7 @@ classdef Subsystem < handle
                     W_i = [W_i, W_ij];
                 end
                    
-                con1 = M_ii >= 0;
+                con1 = M_ii >= 0.000000001*eye(n_i);
                 con2 = [M_i, W_i';W_i, W_ii] >= 0;
                 sol = optimize([con1,con2],[],solverOptions);
                 isStabilizable = sol.problem==0;
@@ -709,6 +725,11 @@ classdef Subsystem < handle
                 
                 disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 tildeW_i = [tildeW_i, tildeW_ii];
+                
+                if abs(det(tildeW_ii))<0.000000001
+                    disp("Error: det(tildeW_ii) low");
+                    isStabilizable = 0;
+                end
                 
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
                 obj.dataToBeDistributed.M = M_iiVal; % Storing
@@ -742,7 +763,7 @@ classdef Subsystem < handle
                 K_ii = sdpvar(n_i,m_i,'full');
                 
                 W_ii = -A_ii'*P_ii - P_ii*A_ii + C_ii'*K_ii' + K_ii*C_ii;
-                con1 = P_ii >= 0;
+                con1 = P_ii >= 0.000000001*eye(n_i);
                 con2 = W_ii >= 0;
                 sol = optimize([con1,con2],[],solverOptions);
                 isObserverStable = sol.problem==0;
@@ -752,6 +773,10 @@ classdef Subsystem < handle
                 W_iiVal = value(W_ii);
                 tildeW_i = W_iiVal; % Note that, here, \tilde{W}_ii = W_ii = \tilde{W}_i. This also needs to be stored
                 
+                if abs(det(tildeW_i))<0.000000001
+                    disp("Error: det(tildeW_ii) low");
+                    isObserverStable = 0;
+                end
                 
                 L_ii = P_iiVal\K_iiVal; % This needs to be stored
                 L_jiVals = [];
@@ -842,7 +867,7 @@ classdef Subsystem < handle
                     W_i = [W_i, W_ij];
                 end
                    
-                con1 = P_ii >= 0;
+                con1 = P_ii >= 0.000000001*eye(n_i);
                 con2 = [M_i, W_i';W_i, W_ii] >= 0;
                 sol = optimize([con1,con2],[],solverOptions);
                 isObserverStable = sol.problem==0;
@@ -870,6 +895,11 @@ classdef Subsystem < handle
                 
                 disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 tildeW_i = [tildeW_i, tildeW_ii];
+                
+                if abs(det(tildeW_ii))<0.000000001
+                    disp("Error: det(tildeW_ii) low");
+                    isObserverStable = 0;
+                end
                 
                 obj.dataToBeDistributed.tildeW = tildeW_i; % Storing
                 obj.dataToBeDistributed.P = P_iiVal; % Storing
@@ -927,8 +957,8 @@ classdef Subsystem < handle
                 W2_22_ii = - X_ii*A_ii - Bn_ii*C_ii - A_ii'*X_ii - C_ii'*Bn_ii';
                 W2_ii = [W2_11_ii, W2_12_ii; W2_21_ii, W2_22_ii];
                 
-                con1 = X_ii >= 0;
-                con2 = Y_ii >= 0;
+                con1 = X_ii >= 0.000000001*eye(n_i);
+                con2 = Y_ii >= 0.000000001*eye(n_i);
                 con3 = W1_ii >= 0;
                 con4 = W2_ii >= 0;
                 
@@ -979,6 +1009,11 @@ classdef Subsystem < handle
                 obj.dataToBeDistributed.N = N_ii; % Storing
                 obj.dataToBeDistributed.tildeW1 = tildeW1_i; % Storing
                 obj.dataToBeDistributed.tildeW2 = tildeW2_i; % Storing
+                
+                if abs(det(tildeW1_i))<0.000000001 ||  abs(det(tildeW2_i))<0.000000001
+                    disp("Error: det(tildeW_ii) low");
+                    isStabilizable = 0;
+                end
                 
                 disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 if ~isStabilizable
@@ -1123,8 +1158,8 @@ classdef Subsystem < handle
                     W2_i = [W2_i, W2_ij];
                 end
                                 
-                con1 = X_ii >= 0;
-                con2 = Y_ii >= 0;
+                con1 = X_ii >= 0.000000001*eye(n_i);
+                con2 = Y_ii >= 0.000000001*eye(n_i);
                 con3 = [M1_i, W1_i';W1_i, W1_ii] >= 0;
                 con4 = [M2_i, W2_i';W2_i, W2_ii] >= 0;
                 sol = optimize([con1,con2,con3,con4],[],solverOptions);
@@ -1221,6 +1256,11 @@ classdef Subsystem < handle
                 obj.dataToBeDistributed.M = M_ii; % Storing
                 obj.dataToBeDistributed.N = N_ii; % Storing
                 
+                if abs(det(tildeW1_ii))<0.000000001 ||  abs(det(tildeW2_ii))<0.000000001
+                    disp("Error: det(tildeW_ii) low");
+                    isStabilizable = 0;
+                end
+                
                 disp(['Data saved ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 if ~isStabilizable
                     disp(['LMI is not feasible at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
@@ -1276,9 +1316,14 @@ classdef Subsystem < handle
                 % W_3_ij = [C_jj e_ij,   D_jj e_ij,   -inv(Q_ii) e_ij]
                 
                 P_ii = sdpvar(n_i,n_i);
-                W_ii = [-P_ii*A_ii-A_ii'*P_ii,  -P_ii*B_ii+C_ii'*S_ii,  C_ii';...
-                        -B_ii'*P_ii+S_ii'*C_ii,  D_ii'*S_ii+S_ii'*D_ii+R_ii,  D_ii';...
-                        C_ii, D_ii, -inv(Q_ii)];
+                if ~all(Q_ii(:)==0)
+                    W_ii = [-P_ii*A_ii-A_ii'*P_ii,  -P_ii*B_ii+C_ii'*S_ii,  C_ii';...
+                            -B_ii'*P_ii+S_ii'*C_ii,  D_ii'*S_ii+S_ii'*D_ii+R_ii,  D_ii';...
+                            C_ii, D_ii, -inv(Q_ii)];
+                else
+                    W_ii = [-P_ii*A_ii-A_ii'*P_ii,  -P_ii*B_ii+C_ii'*S_ii;...
+                            -B_ii'*P_ii+S_ii'*C_ii,  D_ii'*S_ii+S_ii'*D_ii+R_ii];
+                end
                 
                 con1 = P_ii >= 0;
                 con2 = W_ii >= 0;
@@ -1302,7 +1347,11 @@ classdef Subsystem < handle
                 % M_i = inv((scriptD_i*scriptA_i^T)^{-1}*(scriptD_i)*(scriptD_i*scriptA_i^T)^{-1}')
                 
                 % M_i term
-                blockSize = obj.dim_n + obj.dim_p + obj.dim_m; 
+                if ~all(Q_ii(:)==0)
+                    blockSize = obj.dim_n + obj.dim_p + obj.dim_m; 
+                else
+                    blockSize = obj.dim_n + obj.dim_p; 
+                end
                 scriptA_i = [];
                 scriptD_i = [];
                 for j = 1:1:length(previousSubsystems)
@@ -1341,9 +1390,14 @@ classdef Subsystem < handle
                 
                 P_ii = sdpvar(n_i,n_i);
                 % W_ii and W_i terms
-                W_ii = [-P_ii*A_ii-A_ii'*P_ii,  -P_ii*B_ii+C_ii'*S_ii,  C_ii';...
-                        -B_ii'*P_ii+S_ii'*C_ii,  D_ii'*S_ii+S_ii'*D_ii+R_ii,  D_ii';...
-                        C_ii, D_ii, -inv(Q_ii)];
+                if ~all(Q_ii(:)==0)
+                    W_ii = [-P_ii*A_ii-A_ii'*P_ii,  -P_ii*B_ii+C_ii'*S_ii,  C_ii';...
+                            -B_ii'*P_ii+S_ii'*C_ii,  D_ii'*S_ii+S_ii'*D_ii+R_ii,  D_ii';...
+                            C_ii, D_ii, -inv(Q_ii)];
+                else
+                    W_ii = [-P_ii*A_ii-A_ii'*P_ii,  -P_ii*B_ii+C_ii'*S_ii;...
+                            -B_ii'*P_ii+S_ii'*C_ii,  D_ii'*S_ii+S_ii'*D_ii+R_ii];
+                end
                 
                 W_i = [];                
                 for j = 1:1:length(previousSubsystems)
@@ -1363,38 +1417,34 @@ classdef Subsystem < handle
                         B_ij = obj.B{jInd};
                         B_ji = subsystems(jInd).B{iInd};                    
                         if isequal(dissTo,'y')
-                            C_ij = obj.C{jInd};
-                            C_ji = subsystems(jInd).C{iInd};
-                            D_ij = obj.D{jInd};
-                            D_ji = subsystems(jInd).D{iInd};
+                            C_jj = subsystems(jInd).C{jInd};
+                            D_jj = subsystems(jInd).D{jInd};
                         elseif isequal(dissTo,'z')
-                            C_ij = obj.G{jInd};
-                            C_ji = subsystems(jInd).G{iInd};
-                            D_ij = obj.H{jInd};
-                            D_ji = subsystems(jInd).H{iInd};
+                            C_jj = subsystems(jInd).G{jInd};
+                            D_jj = subsystems(jInd).H{jInd};
                         end                
                     elseif isequal(dissFrom,'w')
                         B_ij = obj.E{jInd};
                         B_ji = subsystems(jInd).E{iInd};                    
                         if isequal(dissTo,'y')
-                            C_ij = obj.C{jInd};
-                            C_ji = subsystems(jInd).C{iInd};
-                            D_ij = obj.F{jInd};
-                            D_ji = subsystems(jInd).F{iInd};
+                            C_jj = subsystems(jInd).C{jInd};
+                            D_jj = subsystems(jInd).F{jInd};
                         elseif isequal(dissTo,'z')
-                            C_ij = obj.G{jInd};
-                            C_ji = subsystems(jInd).G{iInd};
-                            D_ij = obj.J{jInd};
-                            D_ji = subsystems(jInd).J{iInd};
+                            C_jj = subsystems(jInd).G{jInd};
+                            D_jj = subsystems(jInd).J{jInd};
                         end
                     end
                     
                     P_jj = subsystems(jInd).dataToBeDistributed.P;
                     
-                    W_ij = [-P_ii*A_ij-A_ji'*P_jj,  -P_ii*B_ij+C_ii'*S_ij,  C_ii'*(i==j);...
-                            -B_ji'*P_jj+S_ji'*C_jj,  D_ii'*S_ij+S_ji'*D_jj+R_ij,  D_ii'*(i==j);...
-                            C_jj*(i==j),  D_jj*(i==j),  -inv(Q_ii)*(i==j)]
-                    
+                    if ~all(Q_ii(:)==0)
+                        W_ij = [-P_ii*A_ij-A_ji'*P_jj,  -P_ii*B_ij+C_ii'*S_ij,  C_ii'*(i==j);...
+                                -B_ji'*P_jj+S_ji'*C_jj,  D_ii'*S_ij+S_ji'*D_jj+R_ij,  D_ii'*(i==j);...
+                                C_jj*(i==j),  D_jj*(i==j),  -inv(Q_ii)*(i==j)];
+                    else
+                        W_ij = [-P_ii*A_ij-A_ji'*P_jj,  -P_ii*B_ij+C_ii'*S_ij;...
+                                -B_ji'*P_jj+S_ji'*C_jj,  D_ii'*S_ij+S_ji'*D_jj+R_ij];
+                    end
                     W_i = [W_i, W_ij];
                 end
                 
@@ -1464,14 +1514,23 @@ classdef Subsystem < handle
                 M_ii = sdpvar(n_i,n_i);
                 L_ii = sdpvar(p_i,n_i,'full');
                 
-                % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
-                W_1_ii = [A_ii*M_ii+B_ii*L_ii+M_ii*A_ii'+L_ii'*B_ii',  -E_ii+M_ii*C_ii'*S_ii,  M_ii*C_ii'];  
-                % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
-                W_2_ii = [-E_ii'+S_ii'*C_ii*M_ii,   F_ii'*S_ii+S_ii'*F_ii+R_ii,   F_ii'];
-                % W_3_ij = [C_jj*M_jj*e_ij, F_jj*e_ij,  -inv(Q_ii)*E_ij]
-                W_3_ii = [C_ii*M_ii, F_ii,  -inv(Q_ii)];
-                % W_ij = [W_1_ij; W_2_ij; W_3_ij]
-                W_ii = [W_1_ii; W_2_ii; W_3_ii];
+                if ~all(Q_ii(:)==0)
+                    % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
+                    W_1_ii = [A_ii*M_ii+B_ii*L_ii+M_ii*A_ii'+L_ii'*B_ii',  -E_ii+M_ii*C_ii'*S_ii,  M_ii*C_ii'];  
+                    % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
+                    W_2_ii = [-E_ii'+S_ii'*C_ii*M_ii,   F_ii'*S_ii+S_ii'*F_ii+R_ii,   F_ii'];
+                    % W_3_ij = [C_jj*M_jj*e_ij, F_jj*e_ij,  -inv(Q_ii)*E_ij]
+                    W_3_ii = [C_ii*M_ii, F_ii,  -inv(Q_ii)];
+                    % W_ij = [W_1_ij; W_2_ij; W_3_ij]
+                    W_ii = [W_1_ii; W_2_ii; W_3_ii];
+                else
+                    % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
+                    W_1_ii = [A_ii*M_ii+B_ii*L_ii+M_ii*A_ii'+L_ii'*B_ii',  -E_ii+M_ii*C_ii'*S_ii];  
+                    % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
+                    W_2_ii = [-E_ii'+S_ii'*C_ii*M_ii,   F_ii'*S_ii+S_ii'*F_ii+R_ii];
+                    % W_ij = [W_1_ij; W_2_ij; W_3_ij]
+                    W_ii = [W_1_ii; W_2_ii];
+                end
                 
                 con1 = M_ii >= 0;
                 con2 = W_ii >= 0;
@@ -1503,7 +1562,11 @@ classdef Subsystem < handle
                 % M1_i = inv(scriptD1_i*scriptA1_i') and tildeW_i = W_i*M1_i;
                 
                 % M_i term
-                blockSize = obj.dim_n + obj.dim_q + obj.dim_m; 
+                if ~all(Q_ii(:)==0)
+                    blockSize = obj.dim_n + obj.dim_q + obj.dim_m; 
+                else
+                    blockSize = obj.dim_n + obj.dim_q; 
+                end
                 scriptA_i = [];
                 scriptD_i = [];
                 for j = 1:1:length(previousSubsystems)
@@ -1544,15 +1607,23 @@ classdef Subsystem < handle
                 M_ii = sdpvar(n_i,n_i);
                 L_ii = sdpvar(p_i,n_i,'full');
                 % W_ii and W_i terms
-                % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
-                W_1_ii = [A_ii*M_ii+B_ii*L_ii+M_ii*A_ii'+L_ii'*B_ii',  -E_ii+M_ii*C_ii'*S_ii,  M_ii*C_ii'];  
-                % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
-                W_2_ii = [-E_ii'+S_ii'*C_ii*M_ii,   F_ii'*S_ii+S_ii'*F_ii+R_ii,   F_ii'];
-                % W_3_ij = [C_jj*M_jj*e_ij, F_jj*e_ij,  -inv(Q_ii)*E_ij]
-                W_3_ii = [C_ii*M_ii, F_ii,  -inv(Q_ii)];
-                % W_ij = [W_1_ij; W_2_ij; W_3_ij]
-                W_ii = [W_1_ii; W_2_ii; W_3_ii];
-                
+                if ~all(Q_ii(:)==0)
+                    % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
+                    W_1_ii = [A_ii*M_ii+B_ii*L_ii+M_ii*A_ii'+L_ii'*B_ii',  -E_ii+M_ii*C_ii'*S_ii,  M_ii*C_ii'];  
+                    % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
+                    W_2_ii = [-E_ii'+S_ii'*C_ii*M_ii,   F_ii'*S_ii+S_ii'*F_ii+R_ii,   F_ii'];
+                    % W_3_ij = [C_jj*M_jj*e_ij, F_jj*e_ij,  -inv(Q_ii)*E_ij]
+                    W_3_ii = [C_ii*M_ii, F_ii,  -inv(Q_ii)];
+                    % W_ij = [W_1_ij; W_2_ij; W_3_ij]
+                    W_ii = [W_1_ii; W_2_ii; W_3_ii];
+                else
+                    % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
+                    W_1_ii = [A_ii*M_ii+B_ii*L_ii+M_ii*A_ii'+L_ii'*B_ii',  -E_ii+M_ii*C_ii'*S_ii];  
+                    % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
+                    W_2_ii = [-E_ii'+S_ii'*C_ii*M_ii,   F_ii'*S_ii+S_ii'*F_ii+R_ii];
+                    % W_ij = [W_1_ij; W_2_ij; W_3_ij]
+                    W_ii = [W_1_ii; W_2_ii];
+                end
                 W_i = [];
                 for j = 1:1:length(previousSubsystems)
                     jInd = previousSubsystems(j);
@@ -1594,14 +1665,23 @@ classdef Subsystem < handle
                         end
                     end
                     
-                    % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
-                    W_1_ij = [A_ij*M_jj+B_ii*L_ij{j}+M_ii*A_ji'+L_ji{j}'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*(i==j)];  
-                    % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
-                    W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*(i==j)];
-                    % W_3_ij = [C_jj*M_jj*e_ij, F_jj*e_ij,  -inv(Q_ii)*E_ij]
-                    W_3_ij = [C_jj*M_jj*(i==j), F_jj*(i==j),  -inv(Q_ii)*(i==j)]
-                    % W_ij = [W_1_ij; W_2_ij; W_3_ij]
-                    W_ij = [W_1_ij; W_2_ij; W_3_ij];
+                    if ~all(Q_ii(:)==0)
+                        % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
+                        W_1_ij = [A_ij*M_jj+B_ii*L_ij{j}+M_ii*A_ji'+L_ji{j}'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*(i==j)];  
+                        % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
+                        W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*(i==j)];
+                        % W_3_ij = [C_jj*M_jj*e_ij, F_jj*e_ij,  -inv(Q_ii)*E_ij]
+                        W_3_ij = [C_jj*M_jj*(i==j), F_jj*(i==j),  -inv(Q_ii)*(i==j)]
+                        % W_ij = [W_1_ij; W_2_ij; W_3_ij]
+                        W_ij = [W_1_ij; W_2_ij; W_3_ij];
+                    else
+                        % W_1_ij = [A_ij*M_jj+B_ii*L_ij+M_ii*A_ji'+L_ji'*B_jj',  -E_ij+M_ii*C_ii'*S_ij,  M_ii*C_ii'*e_ij]  
+                        W_1_ij = [A_ij*M_jj+B_ii*L_ij{j}+M_ii*A_ji'+L_ji{j}'*B_jj',  -E_ij+M_ii*C_ii'*S_ij];  
+                        % W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij,   F_ii'*e_ij]
+                        W_2_ij = [-E_ji'+S_ji'*C_jj*M_jj,   F_ii'*S_ij+S_ji'*F_jj+R_ij];
+                        % W_ij = [W_1_ij; W_2_ij; W_3_ij]
+                        W_ij = [W_1_ij; W_2_ij];
+                    end
                     
                     W_i = [W_i, W_ij];
                 end

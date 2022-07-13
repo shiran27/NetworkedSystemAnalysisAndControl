@@ -4,7 +4,7 @@ close all
 clc
 
 data = [];
-for seedVal = 1:1:100
+for seedVal = 100:1:1000
     
     rng(seedVal) 
 
@@ -52,7 +52,7 @@ for seedVal = 1:1:100
     % dissArgs = 0;
     [Q,S,R] = network.getSomeQSRMatrices(dissFrom,dissTo,dissType,dissArgs); 
     network.storeQSRMatrices(Q,S,R); % Store information locally at each sub-system
-% % %     Central Stability Based Concepts
+    % % %     Central Stability Based Concepts
     % addpath('C:\Program Files\Mosek\9.3\toolbox\R2015a')
     solverOptions = sdpsettings('solver','mosek','verbose',0);
     rng(seedVal);
@@ -68,7 +68,8 @@ for seedVal = 1:1:100
 
     % % % % Stabilization using DOF control
     [AcStab,BcStab,CcStab,DcStab,is4] = network.centralizedDOFStabilization(solverOptions);
-% % % %     Centralized Dissipativity Based Results
+    
+    % % % %     Centralized Dissipativity Based Results
     dissFrom = 'w'; dissTo = 'y';  
     % dissType = 'strictly passive'; %dissArgs = [0.00001,1];
     [Q,S,R] = network.getSomeQSRMatrices(dissFrom,dissTo,dissType,dissArgs); % dissFrom,dissTo,dissType,dissArgs
@@ -91,7 +92,57 @@ for seedVal = 1:1:100
     [Q,S,R] = network.getSomeQSRMatrices(dissFrom,dissTo,dissType,dissArgs); % dissFrom,dissTo,dissType,dissArgs
     [AcDiss,BcDiss,CcDiss,DcDiss,is8] = network.centralizedDOFDissipativation(dissFrom,dissTo,Q,S,R,solverOptions);
     
-    dataTemp = [seedVal,is1,is2,is3,is4,is5,is6,is7,is8]
+    
+    
+    
+    
+    % % Decentralized Stability Based Concepts
+    % addpath('C:\Program Files\Mosek\9.3\toolbox\R2015a')
+    solverOptions = sdpsettings('solver','mosek','verbose',0);
+    indexingScheme = []; % use the default scheme
+    rng(seedVal);
+
+    % % % % Stability Analysis
+    is9 = network.decentralizedStabilityAnalysis([],solverOptions);
+
+    % % % % Stabilization using FSF control
+    [KStab,is10] = network.decentralizedFSFStabilization([],solverOptions);
+
+    % % % % Stable observer design
+    [LStab,is11] = network.decentralizedStableObserverDesign([],solverOptions);
+
+    % % % % Stabilization using DOF control
+    [AcStab,BcStab,CcStab,DcStab,is12] = network.decentralizedDOFStabilization([],solverOptions); 
+    % % Decentralized Dissipativity Based Concepts
+    dissFrom = 'w'; dissTo = 'y';  
+    % dissType = 'strictly passive'; dissArgs = [0.2,0.2];
+    [Q,S,R] = network.getSomeQSRMatrices(dissFrom,dissTo,dissType,dissArgs); % dissFrom,dissTo,dissType,dissArgs
+    network.storeQSRMatrices(Q,S,R);
+
+    % % % % Dissipativity Analysis
+    is13 = network.decentralizedDissipativityAnalysis(dissFrom,dissTo,[],solverOptions);
+
+    % % % % Dissipativation using FSF control
+    [KDiss,is14] = network.decentralizedFSFDissipativation(dissFrom,dissTo,[],solverOptions);
+
+    % % % % Dissipative observer design
+    dissFrom = 'w'; dissTo = 'z';  
+    % dissType = 'strictly passive'; %dissArgs = [0.00001,1];
+    [Q,S,R] = network.getSomeQSRMatrices(dissFrom,dissTo,dissType,dissArgs); % dissFrom,dissTo,dissType,dissArgs
+    network.storeQSRMatrices(Q,S,R);
+    [LDiss,is15] = network.decentralizedDissipativeObserverDesign(dissFrom,dissTo,[],solverOptions);
+
+    % % % % Stabilization using DOF control
+    dissFrom = 'w'; dissTo = 'z';  
+    % dissType = 'strictly passive'; %dissArgs = [0.00001,1];
+    [Q,S,R] = network.getSomeQSRMatrices(dissFrom,dissTo,dissType,dissArgs) % dissFrom,dissTo,dissType,dissArgs
+    network.storeQSRMatrices(Q,S,R);
+    [AcDiss,BcDiss,CcDiss,DcDiss,is16] = network.decentralizedDOFDissipativation(dissFrom,dissTo,[],solverOptions); 
+    
+    
+    
+    dataTemp = [seedVal,is1,is2,is3,is4,is5,is6,is7,is8,seedVal,is9,is10,is11,is12,is13,is14,is15,is16]
     data = [data;dataTemp];
 end
+
 data
